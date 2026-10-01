@@ -1,0 +1,57 @@
+name: Helpyourself
+options:
+  bundleIdPrefix: dev.helpyourself
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    TARGETED_DEVICE_FAMILY: '1'
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: '1'
+targets:
+  Helpyourself:
+    type: application
+    platform: iOS
+    sources:
+      - path: .
+        excludes: [project.yml, Info.plist, Helpyourself.entitlements]
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: helpyourself
+        UILaunchScreen: {}
+        NSHealthClinicalHealthRecordsShareUsageDescription: Archive your clinical Health Records and their original FHIR data on your own server.
+        NSHealthUpdateUsageDescription: Save reviewed blood glucose results to Apple Health after you verify their collection time.
+        NSHealthShareUsageDescription: Sync your selected health history to your own helpyourself server for your archive and trends.
+        NSCameraUsageDescription: Scan paper laboratory reports into your personal archive.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    entitlements:
+      path: Helpyourself.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: [health-records]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.helpyourself.ios
+        CODE_SIGN_STYLE: Automatic
+  HelpyourselfTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../../tests/ios
+        excludes: [Core]
+    dependencies:
+      - target: Helpyourself
+schemes:
+  Helpyourself:
+    build:
+      targets:
+        Helpyourself: all
+    test:
+      targets: [HelpyourselfTests]

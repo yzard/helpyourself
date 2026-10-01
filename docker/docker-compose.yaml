@@ -1,0 +1,37 @@
+services:
+  backend:
+    image: helpyourself:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      UMASK: "077"
+      TZ: "${TZ:-UTC}"
+    volumes:
+      - ${HELPYOURSELF_CONFIG:-./config.toml}:/config/config.toml:ro
+      - ${HELPYOURSELF_DATA_DIR:-helpyourself-data}:/data
+    expose:
+      - "8080"
+    stop_grace_period: 30s
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      HELPYOURSELF_DOMAIN: "${HELPYOURSELF_DOMAIN:-localhost}"
+    ports:
+      - "${HELPYOURSELF_BIND_ADDRESS:-0.0.0.0}:${HELPYOURSELF_HTTP_PORT:-80}:80"
+      - "${HELPYOURSELF_BIND_ADDRESS:-0.0.0.0}:${HELPYOURSELF_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+volumes:
+  helpyourself-data:
+  caddy-data:
+  caddy-config:
+

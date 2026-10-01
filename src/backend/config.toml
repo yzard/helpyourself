@@ -1,0 +1,45 @@
+[server]
+listen = "127.0.0.1:8080"
+data_dir = "data"
+
+[security]
+session_ttl_seconds = 86400
+login_window_seconds = 300
+login_attempts_per_window = 10
+maximum_password_checks = 2
+
+[storage]
+maximum_upload_bytes = 20971520
+maximum_pdf_pages = 100
+maximum_image_pixels = 40000000
+
+[jobs]
+lease_seconds = 120
+maximum_attempts = 3
+
+# Enable only after configuring and testing your own model endpoints.
+# Configure these centrally; clients cannot override them.
+[providers.ocr]
+enabled = false
+base_url = "http://127.0.0.1:8001/v1"
+model = "baidu/Unlimited-OCR"
+adapter = "unlimited_ocr"
+timeout_seconds = 120
+
+[providers.analysis]
+enabled = false
+base_url = "http://127.0.0.1:8002/v1"
+model = "configure-your-model"
+adapter = "openai_chat"
+timeout_seconds = 120
+
+
+# Required with enabled unlimited_ocr; may use the analysis server or a separate model.
+[providers.document_parser]
+enabled = false
+base_url = "http://127.0.0.1:8002/v1"
+model = "configure-your-model"
+adapter = "openai_chat"
+timeout_seconds = 120
+# api_key_file = "secrets/provider-key"
+# extra_body = { temperature = 0, max_tokens = 8192 }

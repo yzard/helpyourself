@@ -1,0 +1,10 @@
+**
+!src/
+!src/backend/
+!src/backend/**
+!docker/
+!docker/entrypoint.sh
+
+!tests/
+!tests/backend/
+!tests/backend/**
