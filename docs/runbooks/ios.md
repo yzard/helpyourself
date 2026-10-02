@@ -4,6 +4,8 @@
 
 当前 Linux 已编译 Core 并运行测试，也解析了全部 Swift 源码；没有运行 Apple SDK 类型检查、签名构建、模拟器或真机。因此本指南是交接步骤，不是已经交付可安装 IPA 的声明。
 
+2026-10-02 用户明确负责在 Mac 上运行构建并在 iOS 上验收。服务端[本轮验收](../reviews/2026-10-02-server-lifecycle-and-load.md)已完成；此处 Apple SDK、权限、完整归档与原生写回检查仍保留为用户的设备验收范围。
+
 ## 统一构建入口
 
 在 macOS 安装 Xcode 与 XcodeGen，选择完整 Xcode 工具链后，从任意目录执行仓库的 `build_ios.sh`：

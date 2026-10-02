@@ -1,5 +1,7 @@
 # 仓库结构与技能审查
 
+历史记录：服务目录、OCR 架构和当前验证证据已由 [独立 OCR 服务审查](2026-10-01-backend-ocr-service.md) 更新；以下保留当时的实现及结果。
+
 历史记录：保留当时的实现和测试事实；当前数据库策略、原件布局、HealthKit 范围及验证结果以 [2026-10-01 审查](2026-10-01-raw-archive-and-skills-audit.md) 为准。
 
 日期：2026-09-27。范围：project-structure、docker-build、add-modify-codebase、general-coding、axum-server、sql-coding、restful-api-design、naming-conventions、write-swift，以及变更的 Python 文件格式。依据是本次实际读取的技能版本；不是沿用 9 月 6 日的旧目录要求。

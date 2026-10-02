@@ -18,6 +18,9 @@ class PlaygroundEntrypointTests(unittest.TestCase):
                 project = Path(temporary)
                 (project / "src/development").mkdir(parents=True)
                 shutil.copy(ROOT / "src/development/playground.py", project / "src/development/playground.py")
+                shutil.copy(ROOT / "src/development/ocr_key.py", project / "src/development/ocr_key.py")
+                (project / "src/backend_ocr").mkdir(parents=True)
+                shutil.copy(ROOT / "src/backend_ocr/config.toml", project / "src/backend_ocr/config.toml")
                 shutil.copy(ROOT / "run_playground.sh", project / "run_playground.sh")
                 build = project / "build_docker.sh"
                 build.write_text("#!/bin/sh\nexit " + ("7" if fail else "0") + "\n")

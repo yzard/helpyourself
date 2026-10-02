@@ -124,7 +124,9 @@ struct ReportView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack { Text(observation["payload"]["raw_name"].stringValue).font(.headline); Spacer(); Text(observation["status"].stringValue.capitalized).font(.caption) }
                                 Text("\(observation["payload"]["raw_result"].stringValue) \(observation["payload"]["raw_unit"].stringValue)").foregroundStyle(.primary)
-                                Text("Reference: \(observation["payload"]["reference_range"].stringValue)").font(.caption).foregroundStyle(.secondary)
+                                Text(LaboratoryPresentation.resultExplanation(observation["interpretation"])).font(.caption)
+                                Text(LaboratoryPresentation.originalReference(observation["payload"], reference: observation["interpretation"]["reference"])).font(.caption).foregroundStyle(.secondary)
+                                Text(LaboratoryPresentation.standardizedReference(observation["interpretation"]["reference"])).font(.caption).foregroundStyle(.secondary)
                             }
                         }.buttonStyle(.plain)
                         Button("View source · page \(Int(observation["payload"]["source"]["page"].numberValue ?? 1))") { showSource(page: Int(observation["payload"]["source"]["page"].numberValue ?? 1)) }.font(.caption)
@@ -139,6 +141,15 @@ struct ReportView: View {
                 Section("Page processing") {
                     ForEach(Array(document["pages"].arrayValue.enumerated()), id: \.offset) { _, page in
                         DisclosureGroup("Page \(Int(page["page"].numberValue ?? 0)) · \(page["status"].stringValue)") { Text(page["content"].stringValue).font(.caption).textSelection(.enabled) }
+                    }
+                }
+            }
+            if !document["extraction_inputs"].arrayValue.isEmpty {
+                Section("Document evidence") {
+                    ForEach(Array(document["extraction_inputs"].arrayValue.enumerated()), id: \.offset) { _, input in
+                        NavigationLink("Page \(Int(input["page"].numberValue ?? 0)) · text layer: \(input["text_status"].stringValue.isEmpty ? "image only" : input["text_status"].stringValue)") {
+                            DocumentEvidenceView(model: model, reportID: reportID, input: input)
+                        }
                     }
                 }
             }
@@ -275,5 +286,31 @@ private struct ReviewedGlucoseWriter: View {
                 if saved { dismiss(); await model.synchronizeHealth(requestAccess: false) }
             } }.disabled(!verifiedTime || model.isBusy)
         }.navigationTitle("Save to Apple Health").toolbar { Button("Cancel") { dismiss() }.disabled(model.isBusy) } }
+    }
+}
+
+private struct DocumentEvidenceView: View {
+    var model: AppModel
+    let reportID: String
+    let input: JSONValue
+    @State private var evidence: JSONValue = .null
+    @State private var error: String?
+    var body: some View {
+        List {
+            if let error { Text(error).foregroundStyle(.red) }
+            if evidence == .null && error == nil { ProgressView() }
+            else {
+                Text("Text layer: \(evidence["text_layer"]["status"].stringValue.isEmpty ? "not applicable to image" : evidence["text_layer"]["status"].stringValue)")
+                if !evidence["error_code"].stringValue.isEmpty { Text("Text extraction issue: \(evidence["error_code"].stringValue)").foregroundStyle(.orange) }
+                Text("The page image is always used for recognition. PDF text may be incomplete or disagree with the image.").font(.caption)
+                Text(evidence["text_layer"]["text"].stringValue).textSelection(.enabled)
+                Text("Positioned words: \(evidence["text_layer"]["words"].arrayValue.count)").font(.caption)
+            }
+        }.navigationTitle("Document evidence").task {
+            do {
+                guard let client = model.client else { return }
+                evidence = try await client.post("reports/input/get", body: .object(["report_id": .string(reportID), "run_id": input["run_id"], "page": input["page"]]))
+            } catch { self.error = error.localizedDescription }
+        }
     }
 }

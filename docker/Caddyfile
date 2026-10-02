@@ -1,4 +1,4 @@
 {$HELPYOURSELF_DOMAIN:localhost} {
-    reverse_proxy backend:8080
+    reverse_proxy backend_api:8080
 }
 

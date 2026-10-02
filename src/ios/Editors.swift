@@ -28,7 +28,7 @@ struct ObservationEditor: View {
                         Text("Unmapped — retain original").tag("")
                         ForEach(metrics, id: \.identifier) { Text($0["name"].stringValue).tag($0["metric_id"].stringValue) }
                     }
-                    Text("Map only when the test and unit match. Unknown units and non-numeric results remain in the archive without a numeric trend.").font(.caption)
+                    Text("Check the printed test, value and unit before mapping. The server handles supported unit conversions; unknown units and bounded or text results remain in the archive without an exact numeric trend.").font(.caption)
                 }
                 Section("Source") {
                     Stepper("Page \(Int(payload["source"]["page"].numberValue ?? 1))", value: Binding(get: { Int(payload["source"]["page"].numberValue ?? 1) }, set: { payload["source"]["page"] = .number(Double($0)) }), in: 1...max(1, pageCount))

@@ -6,39 +6,42 @@
 flowchart LR
     H[Apple Health] --> I[iPhone App]
     I --> C[Caddy HTTPS 入口]
-    C --> R[Rust HTTP 后端]
+    C --> R[backend_api / Rust]
     R --> D[SQLite 与 raw 文件]
     R --> J[持久化任务执行器]
-    J --> O[文档识别服务 / OpenAI 兼容 API]
+    J --> O[backend_ocr / FastAPI]
+    O --> N[Qwen3.8 27B / NInfer / GPU]
     J --> A[健康分析服务 / OpenAI 兼容 API]
     G[未来 Android / Health Connect] --> C
 ```
 
-三个职责不强制对应三个 Rust 进程。首版一个后端进程包含 HTTP 接口和任务执行器，OCR 与分析作为外部服务边界。选择云 API 时不需部署本地模型容器；自托管模型也不要求 Rust 实现。个人部署先只运行一个后端实例，SQLite 不承担多实例协调。
+用户于 2026-10-01 指定两个独立后端。backend_api 管理手机会话、SQLite、原件、任务、复核和导出；backend_ocr 只接收 API 提交的页面图像，运行 Qwen3.8 + NInfer 并返回结构化结果及完整原生回复。OCR 不访问 SQLite 或 API data。分析仍是 API 配置的独立模型接口。SQLite 只允许一个 API 服务实例，不承担多实例协调。
 
 ## 技术实施基线
 
-- 服务端已使用 Rust、Axum、Tokio、SQLx SQLite，版本由 src/backend/Cargo.lock 锁定。
+- 服务端已使用 Rust、Axum、Tokio、SQLx SQLite，版本由 src/backend_api/Cargo.lock 锁定。
 - iPhone 使用原生 SwiftUI、HealthKit，离线缓存与上传队列持久化。当前代码目标 iOS 17；完整 Apple SDK 构建与实际设备仍需核对。
 - 客户端、服务端协议显式版本化；客户端不直接读取服务器 SQLite。
 - 数据读写、领域规则、模型适配器分层，模型回复不能直接执行数据库写操作。
 - 服务器统一完成单位转换、去重与聚合；客户端负责展示与审核，不维护第二套计算规则。
 
-当前实现和验证边界见 [2026-10-01 审查](reviews/2026-10-01-raw-archive-and-skills-audit.md)。
+当前实现和验证边界见 [2026-10-02 审查](reviews/2026-10-02-server-lifecycle-and-load.md)。
 
 ## 目录计划
 
 ```text
-src/backend/                 Rust 服务及 Cargo.toml/Cargo.lock/.cargo、当前 schema、任务与计算模块
+src/backend_api/                 Rust 服务及 Cargo.toml/Cargo.lock/.cargo、当前 schema、任务与计算模块
 src/ios/                    iPhone 界面、HealthKit、缓存及网络模块
-tests/backend/              镜像 backend 的测试结构
+src/backend_ocr/             Python FastAPI 应用、NInfer 生命周期、配置、pyproject.toml/uv.lock
+tests/backend_api/          镜像 backend_api 的测试结构
+tests/backend_ocr/          镜像 backend_ocr 的测试结构
 tests/ios/                  镜像 iOS 的测试结构
 docs/                       所有计划、设计与验证证据
 playground/config.toml      本地完整运行示例，无真实密钥
 playground/data/            本地服务运行数据，不提交
 playground/upload/          人工提供的端到端输入，不提交
 playground/output/          本地运行输出，不提交
-docker/                     Dockerfile、Compose、Caddy 配置及入口
+docker/                     两个组件 Dockerfile、Compose、Caddy 配置及入口
 build/                      中间构建产物，不提交
 dist/                       最终可运行产物，不提交
 build_docker.sh              根目录 Docker 构建入口
@@ -56,13 +59,21 @@ build_ios.sh                 独立 iOS 检查/构建入口
 | security | 会话时长、登录限速、受信代理 |
 | storage | 上传字节与页数上限、临时文件清理策略 |
 | jobs | 各类并发、租约、重试、超时 |
-| providers.ocr | base_url、model、api_key_file、适配器、图像与解码选项 |
+| ocr | enabled、url、api_key_file、timeout_seconds；连接 backend_ocr |
 | providers.analysis | 独立的地址、模型、密钥文件、超时与能力配置 |
 | analysis | 阶段 B 启用开关、触发规则 |
 
 配置层面的密钥引用属于 TOML，密钥文件由服务器管理员挂载，不提交仓库、不发给客户端。相对路径统一以配置文件目录为基准；解析后规范化并校验。这是 helpyourself 的明确选择，不声称 momento 已有该行为。首版配置重启生效，不实现动态热更新。
 
-OCR 与分析允许指向相同或不同服务。能力探测使用合成内容，不擅自发送健康档案；校验视觉输入、结构化返回及 provider 特殊参数。Unlimited-OCR 使用适配器处理 PDF 页面和专用提示，不能只假定更换 model 名称即可运行。
+OCR 的模型、提示及生成参数归 backend_ocr 配置，客户端与 API 请求不能覆盖。两个服务用独立 Bearer 密钥通信，手机的用户会话不传入 OCR。probe-providers 对 OCR 只检查 /health，不加载模型；分析仍使用合成文字探测。详细配置、推理限额和协议见 [OCR 运维](runbooks/ocr.md)。
+
+## 有界执行与临时资源
+
+Database 持有 CpuExecutor，使用 Tokio 既有 blocking 执行器，最多两个重 CPU 任务。HTTP 请求满时返回 429；服务拥有的持久任务可以等待准入。闭包自己持有执行许可，调用方取消不会提前释放容量。Health 另有两个共享入口槽，在同步正文缓冲前取得；上传保持既有两个入口槽。Argon2 密码运算沿用独立两个槽。批次 JSON 解析、校验、摘要和 envelope 编码在 SQL 写事务前完成；大结果序列化也进入共享执行域。
+
+TemporaryFiles 注册上传、raw 暂存、OCR scratch 与导出暂存路径。使用方持有可克隆 lease，CPU 闭包使用文件时也保留 lease；释放不做同步 Drop 删除，也不派生 detached 清理任务。既有维护周期异步清理无活跃 lease 的文件；失败保留并重试。独占 data 锁取得后，启动恢复清除中断留下的 tmp，符号链接仅删除链接。ZIP 闭包同时持有文件变更锁，避免取消请求后原件被提前删除。
+
+停服顺序为 HTTP graceful shutdown、取消并等待持久 worker、等待已准入 CPU 闭包、临时及持久文件清理、关闭 SQLite 池。突然退出的 tmp 由下次启动恢复；原件及数据库仍依照原持久清理队列处理。
 
 ## 身份与隔离
 
@@ -74,7 +85,7 @@ OCR 与分析允许指向相同或不同服务。能力探测使用合成内容�
 
 ## 部署与文件一致性
 
-外部客户端使用 HTTPS 到 Caddy，Caddy 转发内部 HTTP。后端端口不直接暴露公网；代理地址受控，不信任任意转发身份头。Compose 挂载配置、密钥和持久 data 目录；默认无外部推理依赖，模型容器可选。
+外部客户端使用 HTTPS 到 Caddy，Caddy 转发内部 HTTP。后端端口不直接暴露公网；代理地址受控，不信任任意转发身份头。Compose 挂载配置、密钥和持久 data 目录；Compose 同时运行 API、OCR 和 Caddy。OCR 仅在 internal inference 网络开放 8000，无宿主机端口；NInfer 仅监听 OCR 容器内 127.0.0.1:8002。OCR 故障不阻止 API 上传归档和人工复核。
 
 data_dir 是 API 的持久根目录；playground 中对应 playground/data。实际布局如下：
 
@@ -92,9 +103,9 @@ data/
 
 Apple Health 每个接收修订保存完整 JSON envelope；SQLite 同时保存载荷与索引。health_connect 协议来源映射到 google_health 目录，Android 客户端尚未实现。照片与 PDF 分别进 photos/documents，原文件名和 MIME 是数据库元数据。HEIC/HEIF 原字节进入 photos；JPEG 识别副本仅进入 derived。PNG/JPEG 不重新压缩；扫描器提供的每页 PNG 单独归档。原件不跨用户物理共享。
 
-OCR 和 document_parser 的最终 HTTP 回复分别保存到 SQLite extraction_outputs，解析失败也保留已接收回复。人工补项及每次修正保存不可变 observation_revisions，不受 HealthKit 是否能表达该字段影响。
+backend_ocr 的最终 HTTP 回复保存到 SQLite extraction_outputs（stage=ocr），其中包含完整 NInfer raw_response_body、正文、提示版本及结构化结果。非 2xx 和结构解析失败的已接收回复同样先归档；无响应或超过限额的内容不伪造为完整。当前 schema 只接受 ocr stage，旧 document_parser 适配与配置已移除；按用户要求不提供迁移。人工补项及每次修正保存不可变 observation_revisions，不受 HealthKit 是否能表达该字段影响。
 
-数据库当前 schema v6 是新库定义；按空 playground 的用户要求移除历史迁移。空库初始化、v6 重启；其他版本明确拒绝启动，不自动清库。
+数据库当前 schema v7 是新库定义；按空 playground 的用户要求移除历史迁移。空库初始化、v7 重启；其他版本明确拒绝启动，不自动清库。
 
 SQLite 与文件系统不能共用一个事务：上传先写临时文件并校验，再原子移动到目标路径，最后事务提交文件记录和任务。失败产生的孤立文件由可重跑清理任务处理；接口只有全部持久化成功才返回归档接收成功。
 

@@ -39,7 +39,7 @@ private struct TrendSeries: View {
                     }.chartXSelection(value: $selectedTime).chartXAxis { AxisMarks { value in AxisValueLabel { if let seconds = value.as(Double.self) { Text(Date(timeIntervalSince1970: seconds), format: .dateTime.year().month()) } } } }.frame(height: 220)
                     Text("\(result["points"].arrayValue.first?["unit"].stringValue ?? "") · tap a point or a dated result to open its original report").font(.caption)
                 }
-                if let count = result["incomparable_count"].numberValue, count > 0 { Text("\(Int(count)) confirmed results have an unknown date, unsupported unit or non-numeric value. They remain in Reports.").font(.caption) }
+                if let count = result["incomparable_count"].numberValue, count > 0 { Text("\(Int(count)) confirmed results have an unknown date, unsupported unit or non-exact value. They remain in Reports.").font(.caption) }
             }
             Section("Source reports") {
                 Button("Refresh history") { Task { await reload() } }
@@ -48,7 +48,8 @@ private struct TrendSeries: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(point["sampled_at"].stringValue)
                             Text("\(point["value"].stringValue) \(point["unit"].stringValue)").font(.headline)
-                            Text("Reference: \(point["original"]["reference_range"].stringValue)").font(.caption)
+                            Text(LaboratoryPresentation.standardizedReference(point["reference"])).font(.caption)
+                            Text(LaboratoryPresentation.originalReference(point["original"], reference: point["reference"])).font(.caption).foregroundStyle(.secondary)
                             Text("Original: \(point["original"]["raw_result"].stringValue) \(point["original"]["raw_unit"].stringValue) · revision \(Int(point["revision"].numberValue ?? 1))").font(.caption).foregroundStyle(.secondary)
                         }
                     }

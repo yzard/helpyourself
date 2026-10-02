@@ -60,3 +60,5 @@ Excel 导入、WHOOP/Function Health 账户直连、血糖以外的 Apple Health
 ## 阶段 A 的成功定义
 
 用户从 iPhone 导入真实 Function Health PDF 或照片，校正与确认后能查看可信趋势及原报告；同步中断可恢复、不重复记账、不同用户不可互访；可查看健康明细覆盖范围，并能完整导出自己的原档案与结构化记录。具体证据见 [验证计划](validation.md)。
+
+2026-10-01 服务边界补充：用户明确指定独立 backend_ocr，采用 Qwen3.8 + NInfer；backend_api 接收并归档手机原件，调用 OCR 获取结构化结果。配置及当前验收见 [OCR 运维](runbooks/ocr.md)。

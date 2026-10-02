@@ -26,7 +26,7 @@ def describe(configuration, addresses):
     bind = secure_port.get("host_ip", "0.0.0.0")
     domain = caddy["environment"]["HELPYOURSELF_DOMAIN"]
     lines = [
-        f"HTTPS ingress: {bind}:{host_port} -> caddy:443 -> backend:8080 (HTTP)",
+        f"HTTPS ingress: {bind}:{host_port} -> caddy:443 -> backend_api:8080 (HTTP)",
         f"Server URL: https://{domain}:{host_port}",
     ]
     for address in addresses:

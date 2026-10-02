@@ -1,6 +1,6 @@
 # 实施任务与依赖
 
-2026-10-01 更新：数据库按空 playground 直接重构为 schema v6，不提供迁移；原件按来源归档，OCR 回复和人工修订完整保留，已确认血糖可显式写回 Apple Health。最新实现和 skills 缺口见 [全仓库审查](reviews/2026-10-01-raw-archive-and-skills-audit.md)。
+2026-10-02 更新：数据库按空 playground 直接重构为 schema v7，不提供迁移；原件按来源归档，OCR 回复和人工修订完整保留，已确认血糖可显式写回 Apple Health。临时文件生命周期、Health 大载荷隔离与真实扫描/混合 PDF 验证已补齐；最新实现和 skills 复查见 [全仓库审查](reviews/2026-10-02-server-lifecycle-and-load.md)。
 
 状态：P01–P10 的首版代码已交付，P12 个人血脂分析代码默认关闭；本环境审核与自动测试见 [本轮记录](validation/phase-a-results.md)。P00/P11 的真实样本和 Apple SDK/设备证据仍缺，P13 是待执行临床/公众评审，P14 为已明确暂缓的 Android。不能凭代码存在标记全部产品验收通过。
 
@@ -40,7 +40,7 @@ flowchart TD
 
 - 核实 Mac/Xcode、签名与用户 iPhone 的系统版本；当前仓库所在环境不预设能构建 iOS。
 - 建立私人样本位置与人工核对模板；收集用户实际提供的 PDF、图片和至少可用的历史记录，不假造已有数量。
-- 用 Unlimited-OCR 或用户配置模型测页识别、结构化输出和定位，记录推理资源、耗时、漏项、数值/单位错配。
+- 用 Qwen3.8/NInfer 独立 OCR 服务测页识别、结构化输出和定位，记录推理资源、耗时、漏项、数值/单位错配。
 - 真机检查 HealthKit：基础数量、分类、运动、变更/删除、重扫、权限未知和后台行为。
 - 输出 `docs/validation/capability-baseline.md` 与数据类型支持矩阵。没有真实样本时可继续搭基础，但准确性关口保持未通过。
 - 完成标准：开发条件明确、模型适配路径证实、首轮平台类型及尚未支持类型列明。
@@ -49,7 +49,7 @@ flowchart TD
 
 - 建立标准 src/tests 结构、Rust 构建、显式 TOML 加载、配置模板生成、启动校验及 HTTP 应用工厂。
 - 定义认证上下文、统一错误、资源版本、分页与接口规格；iOS 使用共享契约，避免两端字段漂移。
-- 配置分离 OCR 与 analysis provider，分析默认关闭；合成输入能力检查不上传真实健康数据。
+- 配置分离 backend_ocr 服务与 analysis provider，分析默认关闭；合成输入能力检查不上传真实健康数据。
 - 完成标准：合法配置可启动，无效配置明确失败；示例不含密钥；构建输出只进 build/dist。
 
 ## P02 — 多用户与持久层
@@ -138,4 +138,4 @@ flowchart TD
 
 ## 当前验收交接
 
-本环境已完成实现、代码审核及可运行测试。剩余条件是 Mac/Xcode 与签名真机、用户授权的真实 PDF/照片、明确模型端点以及临床评审者。按 [iPhone 指南](runbooks/ios.md)和 [验收记录](validation/phase-a-results.md)执行外部验证；阶段 A 通过后再启用个人分析，Android/公众发布保持后续范围。
+本环境已完成实现、代码审核及可运行测试。剩余条件是 Mac/Xcode 与签名真机、用户授权的真实 PDF/照片、真实报告的模型准确性证据以及临床评审者。按 [iPhone 指南](runbooks/ios.md)和 [验收记录](validation/phase-a-results.md)执行外部验证；阶段 A 通过后再启用个人分析，Android/公众发布保持后续范围。

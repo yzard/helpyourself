@@ -10,7 +10,7 @@
 | D02 | 服务器必需，手机缓存 | 替代最初设备为主档案；支持未来跨平台 |
 | D03 | 第一版数据库多用户、管理员建号 | 替代单用户建议；不开放注册 |
 | D04 | 服务器级 TOML 配置 | 不支持用户逐人覆盖 provider |
-| D05 | Rust 协调 + 两类外部模型接口 | 三个职责不强制三套 Rust 进程 |
+| D05 | Rust backend_api + 独立 backend_ocr（Qwen3.8 / NInfer） | 2026-10-01 用户明确要求 OCR 作为独立服务；分析保持独立配置接口 |
 | D06 | 内部 HTTP，Caddy TLS，Compose | 替代私有网络/VPN 必需方案 |
 | D07 | 原始明细优先、服务端派生 | 不以手机日汇总取代原始数据 |
 | D08 | 暂不做备份功能，停服复制 data | 保留数据导出；在线一致性备份不在首版 |
@@ -29,7 +29,7 @@ HealthKit 同步需按类型选择查询；增量查询与访问授权分别参�
 
 Android 对应 Health Connect，已有实验性 Medical Records 能力，不能沿用“只能交换少数数值”的旧假设。未来实施时核实设备、权限、FHIR 资源和发布限制。[Medical Records](https://developer.android.com/health-and-fitness/health-connect/medical-records)、[医学数据写入](https://developer.android.com/health-and-fitness/health-connect/medical-records/write-data)
 
-Unlimited-OCR 的官方仓库和模型卡支持自托管；PDF 转逐页图片，OpenAI 兼容调用需要相应服务部署及模型特定设置。这只证实候选接入方式，未验证真实血检提取能力。[官方仓库](https://github.com/baidu/Unlimited-OCR)、[模型卡](https://huggingface.co/baidu/Unlimited-OCR)、[vLLM 配方](https://recipes.vllm.ai/baidu/Unlimited-OCR)
+当前用户指定 Qwen3.8 + NInfer。固定 NInfer 源码提交及 Qwen3.8-27B NVFP4 模型修订、SHA256，镜像在构建时下载模型。NInfer 的原生视觉服务运行在 OCR 容器回环地址；当前实现针对 RTX 5090。固定版本与验收记录见 [OCR 运维](runbooks/ocr.md)及[本轮审查](reviews/2026-10-02-server-lifecycle-and-load.md)。[NInfer 官方仓库](https://github.com/Neroued/ninfer)、[官方 NInfer 模型](https://huggingface.co/neroued/Qwen3.8-27B-nvfp4-NInfer)
 
 SQLite 提供在线备份机制；本项目首版选择停止写入后复制目录，不能把随意复制活动数据库当作可靠在线备份。需要在线备份时另立工作包。[SQLite Backup API](https://www.sqlite.org/backup.html)
 
@@ -44,7 +44,7 @@ SQLite 提供在线备份机制；本项目首版选择停止写入后复制目�
 | 项目 | 在何时解决 | 失败时的处理 |
 | --- | --- | --- |
 | Xcode、签名、最低 iOS、用户真机 | P00 | 明确设备验证阻塞，基础后端可继续 |
-| Unlimited-OCR 的血检准确性与资源需求 | P00/P04 | 调整适配器或用已配置的其他候选；不偷偷发往其他服务 |
+| Qwen3.8/NInfer 的真实血检准确性与资源需求 | P00/P04 | 保留失败回复，调整显式部署与提示；不偷偷发往其他服务 |
 | 真实样本数量与人工基准 | P00/P11 | 用合成夹具建设，真实准确性不标通过 |
 | HealthKit 首轮类型与明细限制 | P00/P07 | 支持矩阵显式列出缺口，后续补齐 |
 | 规模与查询延迟 | P08 | 测量后优化索引或可失效缓存 |
@@ -52,3 +52,5 @@ SQLite 提供在线备份机制；本项目首版选择停止写入后复制目�
 | Android 的当前能力 | P14 | 按实际能力实现，不承诺与 iOS 对称 |
 
 以上不阻止进入已批准范围内的设计与实现；遇到影响产品边界的新事实，再回到用户确认变更。
+
+2026-10-01 文档补齐：PDF 文字/视觉双证据、指标专属单位注册、数值与参考边界语义及官方换算依据见 [化验单位契约](laboratory-units.md)，验收见 [最新审查](reviews/2026-10-02-server-lifecycle-and-load.md)。

@@ -1,0 +1,11 @@
+**
+!src/
+!src/backend_ocr/
+!src/backend_ocr/**
+!tests/
+!tests/backend_ocr/
+!tests/backend_ocr/**
+!docker/
+!docker/entrypoint.sh
+**/.venv/
+**/__pycache__/

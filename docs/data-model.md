@@ -1,6 +1,6 @@
 # 数据模型与计算规则
 
-当前数据库以 `src/backend/database/schema.sql` 为准（schema v6）。只初始化空库或重开 v6；用户明确不需要 migration，旧迁移文件已移除。以下对应当前表与领域规则；所有用户数据表和关联都有用户归属。
+当前数据库以 `src/backend_api/database/schema.sql` 为准（schema v7）。只初始化空库或重开 v7；用户明确不需要 migration，旧迁移文件已移除。以下对应当前表与领域规则；所有用户数据表和关联都有用户归属。
 
 ## 实体
 
@@ -10,6 +10,7 @@
 | health_connections / sync_coverage | user_id、平台、客户端安装身份、按类型同步覆盖状态 |
 | raw_files | user_id、文件 ID、relative_path、摘要、MIME、大小、页数；可选 processing_path/processing_sha256 必须同时出现 |
 | reports / report_relations | 当前一个文件对应一份报告；版本、背景、重复或替代关系 |
+| extraction_inputs | user/run/report/page 复合键；文本层状态、完整可用文字/词坐标/原始 bbox XML、处理版本/错误；归属外键，删除级联 |
 | extraction_pages / extraction_outputs | 页面状态与候选；按 run/page/stage 保存完整回复、HTTP 状态、可解析正文、model/adapter |
 | observations / observation_revisions | 稳定观测 ID、不可变修订、审核状态、出处、原值与标准化候选 |
 | 指标注册表（Rust） | 指标身份、允许单位和转换规则；当前不是数据库表 |
@@ -45,7 +46,7 @@
 
 每个已接收有效修订的完整 JSON 同时写入 `raw/apple_health/<user>/<revision>.json`，health_connect 写入 `raw/google_health/`。单条 payload 32 MiB、批次 40 MiB/500 条；超过上限明确失败并保留重试状态，不能截断后推进锚点。类型范围、快照和设备验证缺口见 [支持矩阵](validation/support-matrix.md)。
 
-照片原字节放 `raw/photos/`；HEIC 的处理 JPEG 放 derived，不替代原件。PDF 原字节放 raw/documents。手工录入、OCR 回复及审核历史完整保存 SQLite；导出 v2 将这些表和全部有效原件一起归档。
+照片原字节放 `raw/photos/`；HEIC 的处理 JPEG 放 derived，不替代原件。PDF 原字节放 raw/documents。手工录入、OCR 回复及审核历史完整保存 SQLite；导出 v3 将这些表和全部有效原件一起归档。
 
 同步连接标识与来源记录标识分离：两个手机读取同一 Apple Health 数据时，应在来源身份足够可靠时归并同一记录，否则保留候选关系。Android 补入后沿用相同原则。
 
@@ -57,7 +58,7 @@
 
 每种数据类型定义算法：步数不能把多来源总和相加；睡眠要处理重叠区间；心率均值要说明是样本均值还是按时长加权。尚未定义规则的类型可以归档，但不提供误导的汇总。
 
-聚合返回时间范围、时区、单位、算法版本、来源选择、样本数及数据完整性说明。空集合返回缺失，不返回 0。读取已确认且有效的记录；分析使用同一计算模块，不能让模型自行计算另一套日均值。
+聚合版本 health-daily-v2，由聚合与分析快照共享同一常量。返回时间范围、时区、单位、来源选择，sample_count（参与数）、source_record_count（该日来源候选数）、excluded_sample_count（排除数）及 value_status（available/missing/numeric_overflow）。派生查询只投影数值、封闭单位集合及整数类别，避免无关大字符串进入聚合内存；SQLite 原始 envelope 不改。空集合返回缺失，不返回 0。读取已确认且有效的记录；分析使用同一计算模块，不能让模型自行计算另一套日均值。
 
 首版按需查询有索引的结构化记录。可增加可失效缓存，但缓存键必须包含数据修订水位、时间范围、时区、去重与算法版本；缓存不是原始档案。
 
@@ -68,3 +69,9 @@
 平台明确删除事件产生最小 tombstone，数据从当前视图和分析移除，相关有效载荷清理；断开授权或查询结果为空不推断全量删除。保留必要来源删除标记防止旧批次复活。用户主动从服务器移除平台记录时亦设抑制标记，重新导入需明确操作。
 
 账户删除撤销会话、取消任务、清理数据库记录与文件及缓存；迟到的模型回复不得重新创建数据。普通记录删除是逻辑/文件清理，不承诺对底层磁盘、SQLite 空闲页或用户离线备份进行取证级抹除。
+
+## 当前单位与参考区间派生
+
+单一规则在 src/backend_api/laboratory.rs，版本 lab-units-v2。原始 payload 和修订不覆盖；API 查询与导出按同一规则重算派生解释，并记录版本/规则/来源。标准化字段不是独立事实或用户可直接提交的数据。10 项之外仍能完整归档，须保留未映射，不凭名称猜测。
+
+比较符/简单闭区间保留边界及包含性；文本、逗号歧义、条件化范围、未知单位及溢出返回明确不可比较原因。参考范围有显式单位时独立换算，否则采用结果列单位并明示出处。转换默认最多 6 位小数；同单位精度保留，非零微小值不会舍入成零。不存在通用“医学正常范围”或自动异常判断，report_flag 仍是报告原标记。
