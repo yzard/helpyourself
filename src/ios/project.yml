@@ -18,11 +18,14 @@ targets:
     platform: iOS
     sources:
       - path: .
-        excludes: [project.yml, Info.plist, Helpyourself.entitlements]
+        excludes: [Core, project.yml, Info.plist, Helpyourself.entitlements]
+      - path: Core
     info:
-      path: Info.plist
+      path: ../../build/ios/Info.plist
       properties:
         CFBundleDisplayName: helpyourself
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         NSHealthClinicalHealthRecordsShareUsageDescription: Archive your clinical Health Records and their original FHIR data on your own server.
         NSHealthUpdateUsageDescription: Save reviewed blood glucose results to Apple Health after you verify their collection time.
@@ -32,7 +35,7 @@ targets:
           NSAllowsLocalNetworking: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     entitlements:
-      path: Helpyourself.entitlements
+      path: ../../build/ios/Helpyourself.entitlements
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: [health-records]
@@ -43,9 +46,22 @@ targets:
   HelpyourselfTests:
     type: bundle.unit-test
     platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     sources:
-      - path: ../../tests/ios
-        excludes: [Core]
+      - path: ../../tests/ios/HealthBridgeTests.swift
+      - path: ../../tests/ios/AppModelTests.swift
+    dependencies:
+      - target: Helpyourself
+  HelpyourselfUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    sources:
+      - path: ../../tests/ios/UITests
     dependencies:
       - target: Helpyourself
 schemes:
@@ -54,4 +70,4 @@ schemes:
       targets:
         Helpyourself: all
     test:
-      targets: [HelpyourselfTests]
+      targets: [HelpyourselfTests, HelpyourselfUITests]

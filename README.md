@@ -6,7 +6,7 @@
 
 PDF 保留逐页文字与图像证据；当前 10 项指标支持常见单位换算，原始数值、单位和参考范围与标准化结果分别展示。[补齐计划与状态](docs/implementation-document-units.md)记录实施顺序及剩余验收。
 
-后端及合成部署测试通过；iPhone 完整构建、HealthKit 真机和真实报告准确性仍待外部验收，尚无可安装 IPA。
+后端及合成部署测试通过；iOS 模拟器构建、iPhone unsigned Release 构建及 HealthKit 模拟器主流程已验证。真机、真实传感器/临床记录和真实报告准确性仍待验收，设备安装需要签名。[iOS 验证记录](docs/validation/ios-simulator-2026-10-02.md)。
 
 - [后端启动](docs/runbooks/backend.md)
 - [OCR 服务配置](docs/runbooks/ocr.md)

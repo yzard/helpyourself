@@ -9,6 +9,8 @@ struct HealthView: View {
         List {
             Section {
                 Button("Connect Apple Health") { Task { await model.synchronizeHealth(requestAccess: true); await reload() } }.disabled(model.isBusy)
+                Button("Select prescriptions and medications") { Task { await model.synchronizeHealth(requestAccess: true, requestSelectedAccess: true); await reload() } }.disabled(model.isBusy)
+                Text("Vision prescriptions and medications require individual selection. Use this button each time you want to archive those records.").font(.caption).foregroundStyle(.secondary)
                 Button("Sync now") { Task { await model.synchronizeHealth(requestAccess: false); await reload() } }.disabled(model.isBusy)
                 Text(model.health.status).font(.caption)
                 Text("Only data visible to this iPhone can sync. An empty result does not tell us whether access was denied or data is absent.").font(.caption).foregroundStyle(.secondary)

@@ -8,6 +8,7 @@ struct ReportsView: View {
     var model: AppModel
     @State private var importing = false
     @State private var scanning = false
+    @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
     var body: some View {
         List {
@@ -40,7 +41,7 @@ struct ReportsView: View {
         .toolbar { ToolbarItem(placement: .primaryAction) {
             Menu {
                 Button("Import PDF or image", systemImage: "folder") { importing = true }
-                PhotosPicker(selection: $photo, matching: .images) { Label("Choose photo", systemImage: "photo") }
+                Button("Choose photo", systemImage: "photo") { choosingPhoto = true }
                 if VNDocumentCameraViewController.isSupported { Button("Scan report", systemImage: "doc.viewfinder") { scanning = true } }
             } label: { Image(systemName: "plus") }.disabled(model.isBusy)
         } }
@@ -55,6 +56,7 @@ struct ReportsView: View {
                 } catch { model.errorMessage = error.localizedDescription }
             }
         }
+        .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images)
         .onChange(of: photo) { _, item in Task {
             do { if let bytes = try await item?.loadTransferable(type: Data.self) { await addPhoto(bytes, name: "Report photo") } }
             catch { model.errorMessage = error.localizedDescription }
@@ -134,7 +136,7 @@ struct ReportView: View {
                         if observation["status"] == .string("confirmed"), observation["payload"]["metric_id"] == .string("glucose") {
                             Button("Save to Apple Health") { healthWriter = EditTarget(observation: observation) }.font(.caption).disabled(model.isBusy)
                         }
-                    }.padding(.vertical, 5)
+                    }.buttonStyle(.borderless).padding(.vertical, 5)
                 }
             }
             if !document["pages"].arrayValue.isEmpty {
@@ -178,10 +180,11 @@ struct ReportView: View {
         .sheet(isPresented: $contextVisible) { ContextEditor(context: document["context"]) { context in try await save(observations: [], context: context) } }
         .sheet(isPresented: $relationsVisible) {
             NavigationStack { List(model.reports.filter { $0["report_id"].stringValue != reportID }, id: \.identifier) { report in
-                Menu(report["original_name"].stringValue) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(report["original_name"].stringValue).font(.headline)
                     Button("This is a duplicate; prefer selected report") { Task { await relate(to: report["report_id"].stringValue, kind: "duplicate") } }
                     Button("Selected report revises this report") { Task { await relate(to: report["report_id"].stringValue, kind: "superseded") } }
-                }
+                }.buttonStyle(.borderless)
             }.navigationTitle("Prefer another report").toolbar { Button("Done") { relationsVisible = false } } }
         }
         .confirmationDialog("Delete the original file, results and related analysis?", isPresented: $deleting) {

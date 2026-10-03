@@ -22,7 +22,7 @@ struct SettingsView: View {
                         Text("\(item["status"].stringValue.capitalized) · \(Date(timeIntervalSince1970: item["created_at"].numberValue ?? 0).formatted())")
                         if item["status"] == .string("ready") { Button("Download and share") { Task { await download(item["export_id"].stringValue) } }.disabled(model.isBusy) }
                         Button("Delete export", role: .destructive) { Task { await action("exports/delete", body: .object(["export_id": item["export_id"]])); try? model.archive?.remove(name: "export-\(item["export_id"].stringValue).zip"); await reload() } }
-                    }
+                    }.buttonStyle(.borderless)
                 }
             }
             Section {

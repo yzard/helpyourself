@@ -29,9 +29,25 @@ command -v xcodebuild >/dev/null || { echo 'Select a full Xcode installation bef
 mkdir -p build/ios dist/ios
 xcodegen generate --spec src/ios/project.yml --project build/ios
 XCODE=(xcodebuild -project build/ios/Helpyourself.xcodeproj -scheme Helpyourself -derivedDataPath build/ios/DerivedData)
-"${XCODE[@]}" -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build-for-testing
+"${XCODE[@]}" -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGN_IDENTITY=- build-for-testing
 if [ -n "$TEST_DESTINATION" ]; then
-    "${XCODE[@]}" -sdk iphonesimulator -destination "$TEST_DESTINATION" CODE_SIGNING_ALLOWED=NO test-without-building
+    # Native tests use synthetic data and a loopback-only API fixture.
+    python3 tests/ios/simulator_fixture.py > build/ios/fixture.log 2>&1 &
+    FIXTURE_PID=$!
+    trap 'kill "$FIXTURE_PID" 2>/dev/null || true' EXIT
+    python3 - "$FIXTURE_PID" <<'PY'
+import os, sys, time, urllib.request
+for attempt in range(50):
+    os.kill(int(sys.argv[1]), 0)
+    try:
+        urllib.request.urlopen('http://127.0.0.1:18765/api/v1/test/ping', timeout=1).close()
+        break
+    except OSError:
+        time.sleep(0.1)
+else:
+    raise SystemExit('Simulator API fixture did not start')
+PY
+    "${XCODE[@]}" -sdk iphonesimulator -destination "$TEST_DESTINATION" -parallel-testing-enabled NO CODE_SIGN_IDENTITY=- test-without-building
 fi
 "${XCODE[@]}" -sdk iphoneos -destination 'generic/platform=iOS' -configuration Release CODE_SIGNING_ALLOWED=NO build
 rm -rf "$PROJECT_ROOT/dist/ios/Helpyourself.app"

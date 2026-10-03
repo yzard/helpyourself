@@ -17,10 +17,10 @@ import Foundation
         let records: [JSONValue]
     }
 
-    static func synchronize(store: HKHealthStore, client: APIClient, archive: LocalArchive, connectionID: String, installationID: UUID) async throws -> [String] {
+    static func synchronize(store: HKHealthStore, client: APIClient, archive: LocalArchive, connectionID: String, installationID: UUID, includeSelectedRecords: Bool = false) async throws -> [String] {
         var failed: [String] = []
         var kinds = characteristics.map(\.rawValue) + ["activity_summary", "cda_document"]
-        if #available(iOS 26.0, *) { kinds.append("user_annotated_medications") }
+        if #available(iOS 26.0, *), includeSelectedRecords { kinds.append("user_annotated_medications") }
         for kind in kinds {
             try Task.checkCancellation()
             let pendingName = "pending-snapshot-\(kind).json"

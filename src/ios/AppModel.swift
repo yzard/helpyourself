@@ -121,9 +121,9 @@ final class AppModel {
         return location
     }
 
-    func synchronizeHealth(requestAccess: Bool) async {
+    func synchronizeHealth(requestAccess: Bool, requestSelectedAccess: Bool = false) async {
         guard let client, let archive, !isBusy else { return }
-        await perform { try await health.synchronize(client: client, archive: archive, requestAccess: requestAccess) }
+        await perform { try await health.synchronize(client: client, archive: archive, requestAccess: requestAccess, requestSelectedAccess: requestSelectedAccess) }
     }
 
     func logout() async {

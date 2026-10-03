@@ -2,9 +2,7 @@
 
 源码在 `src/ios/`，SwiftUI + HealthKit + PDFKit/VisionKit，目标 iOS 17 起，Swift 6 严格并发。Core 的 Swift Package 使用工具链 6.2；完整构建使用带对应 SDK 的 macOS/Xcode（例如 Xcode 26）和 XcodeGen。
 
-当前 Linux 已编译 Core 并运行测试，也解析了全部 Swift 源码；没有运行 Apple SDK 类型检查、签名构建、模拟器或真机。因此本指南是交接步骤，不是已经交付可安装 IPA 的声明。
-
-2026-10-02 用户明确负责在 Mac 上运行构建并在 iOS 上验收。服务端[本轮验收](../reviews/2026-10-02-server-lifecycle-and-load.md)已完成；此处 Apple SDK、权限、完整归档与原生写回检查仍保留为用户的设备验收范围。
+2026-10-02 已在 Xcode 27 / iOS 26.4 完成模拟器构建、Core 与 Apple SDK 测试、HealthKit 血糖保存主流程和 unsigned iPhone Release 构建。具体通过范围及仍需验收的内容见 [iOS 模拟器记录](../validation/ios-simulator-2026-10-02.md)。
 
 ## 统一构建入口
 
@@ -22,7 +20,7 @@ Linux 可执行 `./build_ios.sh --core-only`：在 Swift 6.2 容器内做全部 
 
 所有源文件在 `src/ios/`，测试镜像在 `tests/ios/`；没有旧平台树或兼容副本。生成工程后可在 Xcode 打开 `build/ios/Helpyourself.xcodeproj` 做签名和真机调试。XcodeGen [配置文档](https://github.com/yonaskolb/XcodeGen/blob/master/Docs/Usage.md)是相关设置的参考。
 
-当前只验证了 Linux Core 路径和脚本失败分支。尚无 Apple SDK 构建、签名或真机结果。HealthKit 权限、真实记录与 Watch 来源必须再用真机验收。
+模拟器测试使用 ad-hoc 签名和自动启动的 loopback 合成 API（Python 3，端口 18765），不连接生产账户。生成的 Info.plist 与 entitlements 位于 build/ios，测试退出会停止合成 API。直接在 Xcode 运行测试时，先启动 `python3 tests/ios/simulator_fixture.py`。真实记录与 Watch 来源尚未计入模拟器通过范围。
 
 ## 试用流程
 
@@ -30,11 +28,11 @@ Linux 可执行 `./build_ios.sh --core-only`：在 Swift 6.2 容器内做全部 
 2. Reports 导入 PDF/照片或扫描纸质报告。PNG/JPEG 保留所取文件原字节；HEIC/HEIF 同时上传原件和 JPEG 识别副本。扫描器返回的每页 PNG 单独上传，当前各页分别是一份报告。上传前持久化全部待上传字节和 UUID；响应丢失重用 UUID。待上传行可左滑丢弃。
 3. 进入报告看原件、提取状态、页级文字、完整 OCR/解析回复和候选。点选候选，核对原值、单位、采样日期、参考区间、指标映射与出处，再选 Confirmed。也可人工加行、保留 Pending 或 Rejected，全部由 API 保留历史。
 4. Trends 选择指标，可同时比较第二项，各自使用独立纵轴。点击图表附近的点或日期行回到原件页。
-5. Health 连接权限并同步。每个查询页拆分出的全部批次先落盘，全部确认后推进锚点；下次进入前台或手动同步继续。样本 secure archive、可读序列和快照都归档到 API。类型随 OS/权限动态可用，范围与缺口见支持矩阵；临床记录读取另需 Health Records entitlement 和设备支持。
+5. Health 连接权限并同步。视力处方与药物需要在“Select prescriptions and medications”中逐条选择，普通前台同步不会自动弹出这些选择页面。每个查询页拆分出的全部批次先落盘，全部确认后推进锚点；下次进入前台或手动同步继续。样本 secure archive、可读序列和快照都归档到 API。类型随 OS/权限动态可用，范围与缺口见支持矩阵；临床记录读取另需 Health Records entitlement 和设备支持。
 6. Insights 仅在服务器启用 analysis 后允许创建个人血脂回顾，查看引用、缺失资料、其他解释和就医问题，记录反馈。下拉刷新查看后台任务结果。
 7. Settings 创建、刷新、下载并分享完整 ZIP，也可删除导出、报告或账户。
 
-已确认 glucose 项提供显式 Save to Apple Health：仅接受精确数值及 mg/dL 或 mmol/L。用户须核对真实采样日期和时间；先将该时间作为新修订保存 API，再请求 HealthKit 写权限并保存血糖样本。稳定 sync identifier/version 用于重试及修订去重。日期级旧修订仍保留，不默认伪造采血时间。若已启用 Health 同步，保存后尝试回读归档；否则需用户开启同步。其余报告项目保持 API 全量归档，不将 LDL/HbA1c 映射成错误的膳食类型。此写回流程尚待 Apple SDK/真机验证。
+已确认 glucose 项提供显式 Save to Apple Health：仅接受精确数值及 mg/dL 或 mmol/L。用户须核对真实采样日期和时间；先将该时间作为新修订保存 API，再请求 HealthKit 写权限并保存血糖样本。稳定 sync identifier/version 用于重试及修订去重。日期级旧修订仍保留，不默认伪造采血时间。若已启用 Health 同步，保存后尝试回读归档；否则需用户开启同步。其余报告项目保持 API 全量归档，不将 LDL/HbA1c 映射成错误的膳食类型。此写回流程已通过 Apple SDK 和模拟器真实 HealthKit 授权/保存测试；真机验收仍未完成。
 
 服务器报告删除与 Apple Health 样本删除是独立操作；当前删除报告不会替用户删除已经写入 Apple Health 的样本。
 

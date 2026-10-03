@@ -24,7 +24,15 @@ final class HealthBridge {
     var definitions: [Definition] { HealthCatalog.definitions }
 
     func writeReviewedGlucose(_ observation: JSONValue, server: URL, userID: String, sampledAt: Date) async throws {
-        guard HKHealthStore.isHealthDataAvailable(), observation["status"] == .string("confirmed"),
+        guard HKHealthStore.isHealthDataAvailable() else { throw APIError.invalidResponse }
+        let sample = try Self.reviewedGlucoseSample(observation, server: server, userID: userID, sampledAt: sampledAt)
+        try await store.requestAuthorization(toShare: [sample.quantityType], read: [])
+        try await store.save(sample)
+        status = "Reviewed glucose saved to Apple Health"
+    }
+
+    nonisolated static func reviewedGlucoseSample(_ observation: JSONValue, server: URL, userID: String, sampledAt: Date) throws -> HKQuantitySample {
+        guard observation["status"] == .string("confirmed"),
               observation["payload"]["metric_id"] == .string("glucose"),
               let value = Double(observation["payload"]["raw_result"].stringValue.trimmingCharacters(in: .whitespacesAndNewlines)),
               value.isFinite, value >= 0,
@@ -32,27 +40,45 @@ final class HealthBridge {
               let revision = observation["revision"].numberValue, revision >= 1 else { throw APIError.invalidResponse }
         let unit = observation["payload"]["raw_unit"].stringValue
         guard ["mg/dL", "mmol/L"].contains(unit), !observation["observation_id"].stringValue.isEmpty else { throw APIError.invalidResponse }
-        try await store.requestAuthorization(toShare: [type], read: [])
         let identity = "\(server.absoluteString)|\(userID)|\(observation["observation_id"].stringValue)"
         let identifier = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
-        let sample = HKQuantitySample(type: type, quantity: HKQuantity(unit: HKUnit(from: unit), doubleValue: value), start: sampledAt, end: sampledAt,
+        let healthUnit = unit == "mmol/L"
+            ? HKUnit.moleUnit(with: .milli, molarMass: HKUnitMolarMassBloodGlucose).unitDivided(by: .liter())
+            : HKUnit(from: "mg/dL")
+        return HKQuantitySample(type: type, quantity: HKQuantity(unit: healthUnit, doubleValue: value), start: sampledAt, end: sampledAt,
             metadata: [HKMetadataKeySyncIdentifier: "helpyourself:\(identifier)", HKMetadataKeySyncVersion: NSNumber(value: revision),
                        "helpyourself_observation_id": observation["observation_id"].stringValue])
-        try await store.save(sample)
-        status = "Reviewed glucose saved to Apple Health"
     }
 
-    func synchronize(client: APIClient, archive: LocalArchive, requestAccess: Bool) async throws {
+    static func bulkReadTypes(supportsClinical: Bool) -> Set<HKObjectType> {
+        let samples = HealthCatalog.definitions.filter {
+            !($0.type is HKCorrelationType) && (!($0.type is HKClinicalType) || supportsClinical)
+        }.map { $0.type as HKObjectType }
+        return Set(samples).union(HealthSnapshots.readTypes).filter {
+            !$0.requiresPerObjectAuthorization() && $0.identifier != "HKMedicationDoseEventTypeIdentifierMedicationDoseEvent"
+        }
+    }
+
+    static var selectedReadTypes: [HKObjectType] {
+        var types: [HKObjectType] = [HKObjectType.visionPrescriptionType()]
+        if #available(iOS 26.0, *) { types.append(HKObjectType.userAnnotatedMedicationType()) }
+        return types
+    }
+
+    func synchronize(client: APIClient, archive: LocalArchive, requestAccess: Bool, requestSelectedAccess: Bool = false) async throws {
         guard !isSyncing else { return }
         guard HKHealthStore.isHealthDataAvailable() else { status = "Health data unavailable on this device"; return }
         if !requestAccess, try archive.load(Bool.self, name: "health-enabled.json") != true { return }
         isSyncing = true; defer { isSyncing = false }
         do {
             if requestAccess {
-                var types = Set(definitions.filter { !($0.type is HKCorrelationType) && (!($0.type is HKClinicalType) || store.supportsHealthRecords()) }.map { $0.type as HKObjectType })
-                types.formUnion(HealthSnapshots.readTypes)
-                try await store.requestAuthorization(toShare: [], read: types)
+                try await store.requestAuthorization(toShare: [], read: Self.bulkReadTypes(supportsClinical: store.supportsHealthRecords()))
                 try archive.save(true, name: "health-enabled.json")
+            }
+            if requestSelectedAccess {
+                for type in Self.selectedReadTypes {
+                    try await store.requestPerObjectReadAuthorization(for: type, predicate: nil)
+                }
             }
             let installation = try archive.load(UUID.self, name: "installation.json") ?? UUID()
             try archive.save(installation, name: "installation.json")
@@ -61,6 +87,8 @@ final class HealthBridge {
             guard !connectionID.isEmpty else { throw APIError.invalidResponse }
             var failedTypes: [String] = []
             types: for definition in definitions {
+                // These records are read only after the user explicitly selects them.
+                if !requestSelectedAccess, definition.type.requiresPerObjectAuthorization() || definition.kind == "medication_dose_event" { continue }
                 if definition.type is HKClinicalType, !store.supportsHealthRecords() {
                     _ = try await client.post("health/sync", body: .object(["connection_id": .string(connectionID), "batch_id": .string(UUID().uuidString), "record_type": .string(definition.kind), "coverage_status": .string("unsupported"), "records": .array([])]))
                     continue
@@ -95,7 +123,7 @@ final class HealthBridge {
                     if page.count < 10 { break }
                 }
             }
-            failedTypes += try await HealthSnapshots.synchronize(store: store, client: client, archive: archive, connectionID: connectionID, installationID: installation)
+            failedTypes += try await HealthSnapshots.synchronize(store: store, client: client, archive: archive, connectionID: connectionID, installationID: installation, includeSelectedRecords: requestSelectedAccess)
             coverage = try await client.post("health/coverage", body: .object([:]))["coverage"].arrayValue
             status = failedTypes.isEmpty ? "Sync complete. Read permission remains private to Health." : "Some types could not be read: \(failedTypes.joined(separator: ", ")). Retry when available."
         } catch {
@@ -143,7 +171,7 @@ final class HealthBridge {
             }
         }
         if let clinical = sample as? HKClinicalRecord, let resource = clinical.fhirResource {
-            payload["fhir"] = .object(["resource_type": .string(resource.resourceType), "identifier": .string(resource.identifier),
+            payload["fhir"] = .object(["resource_type": .string(resource.resourceType.rawValue), "identifier": .string(resource.identifier),
                                         "data_base64": .string(resource.data.base64EncodedString())])
         }
         if let correlation = sample as? HKCorrelation {
