@@ -14,7 +14,8 @@ PDF 保留逐页文字与图像证据；当前 10 项指标支持常见单位换
 - [OCR 服务配置](docs/runbooks/ocr.md)
 - [iPhone 构建与试用](docs/runbooks/ios.md)
 - [API 契约](docs/api.md)
-- [最新实现与全仓库 skills 审查](docs/reviews/2026-10-02-server-lifecycle-and-load.md)
+- [最新配置与 skills 约束](docs/reviews/2026-10-03-embedded-credentials.md)
+- [服务端生命周期与全仓库审查](docs/reviews/2026-10-02-server-lifecycle-and-load.md)
 - [设计与实施计划](docs/README.md)
 
 - [2026-09-27 历史结构审查](docs/reviews/2026-09-27-structure-audit.md)

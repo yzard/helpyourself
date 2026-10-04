@@ -50,10 +50,14 @@ pub fn write_template(data_dir: &std::path::Path) -> Result<(), AppError> {
         ));
     }
     std::fs::create_dir_all(data_dir)?;
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(data_dir.join("config.toml"))?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(data_dir.join("config.toml"))?;
     file.write_all(TEMPLATE.as_bytes())?;
     file.sync_all()?;
     Ok(())

@@ -27,10 +27,6 @@ pub async fn extract(
     if !config.enabled {
         return Err(AppError::Invalid("OCR service is disabled"));
     }
-    let secret = tokio::fs::read_to_string(&config.api_key_file).await?;
-    if secret.trim().len() < 24 || secret.trim().len() > 8192 {
-        return Err(AppError::Invalid("Invalid OCR service key file"));
-    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -49,7 +45,7 @@ pub async fn extract(
             "{}/api/v1/documents/extract",
             config.url.trim_end_matches('/')
         ))
-        .bearer_auth(secret.trim())
+        .bearer_auth(&config.api_key)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body(request_body)
         .send()

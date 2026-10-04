@@ -60,13 +60,8 @@ async fn complete_once(provider: &ProviderConfig, messages: Value) -> Result<Com
         provider.base_url.trim_end_matches('/')
     );
     let mut request = client.post(address).json(&body);
-    if let Some(path) = &provider.api_key_file {
-        let secret = tokio::fs::read_to_string(path).await?;
-        let secret = secret.trim();
-        if secret.is_empty() || secret.len() > 8192 {
-            return Err(AppError::Invalid("Invalid provider key file"));
-        }
-        request = request.bearer_auth(secret);
+    if !provider.api_key.is_empty() {
+        request = request.bearer_auth(&provider.api_key);
     }
     let response = request
         .send()

@@ -1,7 +1,7 @@
 [server]
 host = "0.0.0.0"
 port = 8000
-api_key_file = "ocr-key"
+api_key = "" # Set the shared OCR key here; playground initialization generates it.
 timeout_seconds = 600
 idle_timeout_seconds = 300
 maximum_pending_requests = 4

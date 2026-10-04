@@ -3,18 +3,25 @@ import tomllib
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 
 
 class ServerSettings(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     host: str
     port: int = Field(gt=0, le=65535)
-    api_key_file: Path
+    api_key: SecretStr = Field(min_length=24, max_length=8192)
     timeout_seconds: int = Field(ge=1, le=3600)
     idle_timeout_seconds: int = Field(ge=1, le=86400)
     maximum_pending_requests: int = Field(ge=1, le=8)
     maximum_request_bytes: int = Field(ge=1024, le=104857600)
+
+    @field_validator('api_key')
+    @classmethod
+    def validate_key(cls, value: SecretStr) -> SecretStr:
+        if not all(33 <= ord(character) <= 126 for character in value.get_secret_value()):
+            raise ValueError('OCR API key must contain visible ASCII characters without whitespace')
+        return value
 
     @model_validator(mode='after')
     def validate_host(self) -> 'ServerSettings':
@@ -23,7 +30,7 @@ class ServerSettings(BaseModel):
 
 
 class EngineSettings(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     binary: str = Field(min_length=1)
     path: Path
     model: Literal['qwen3.8-27b-ninfer-nvfp4']
@@ -37,7 +44,7 @@ class EngineSettings(BaseModel):
 
 
 class Config(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra='forbid', hide_input_in_errors=True)
     server: ServerSettings
     engine: EngineSettings
 
@@ -55,16 +62,10 @@ def load_config(data_dir: Path) -> Config:
     if not directory.is_dir():
         raise ValueError('--data-dir must be a directory')
     path = directory / 'config.toml'
-    config = Config.model_validate(tomllib.loads(path.read_text()))
-    for owner, name in [(config.server, 'api_key_file'), (config.engine, 'path')]:
-        value = getattr(owner, name)
-        if not value.is_absolute():
-            setattr(owner, name, directory / value)
+    try:
+        config = Config.model_validate(tomllib.loads(path.read_text()))
+    except (tomllib.TOMLDecodeError, ValidationError):
+        raise ValueError('Invalid OCR TOML configuration; check schema and field values') from None
+    if not config.engine.path.is_absolute():
+        config.engine.path = directory / config.engine.path
     return config
-
-
-def read_service_key(config: Config) -> str:
-    key = config.server.api_key_file.read_text().strip()
-    if not 24 <= len(key) <= 8192:
-        raise ValueError('OCR service key must contain 24–8192 characters')
-    return key

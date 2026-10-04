@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .config import Config, read_service_key
+from .config import Config
 from .documents import ExtractionRequest, ExtractionResponse, parse_response, prepare_request
 from .engine import EngineRuntime
 from .errors import OcrError
@@ -114,7 +114,7 @@ async def watch_disconnect(request: Request, task: asyncio.Task) -> None:
 
 
 def create_application(config: Config) -> FastAPI:
-    key = read_service_key(config)
+    key = config.server.api_key.get_secret_value()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

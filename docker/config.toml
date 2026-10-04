@@ -20,11 +20,12 @@ maximum_attempts = 3
 enabled = true
 url = "http://backend_ocr:8000"
 timeout_seconds = 660
-api_key_file = "ocr-key"
+api_key = "" # Set the shared OCR key here; playground initialization generates it.
 
 [providers.analysis]
 enabled = false
 base_url = "http://analysis:8000/v1"
 model = "configure-your-model"
 adapter = "openai_chat"
+api_key = "" # Empty only for a provider that needs no authentication.
 timeout_seconds = 120

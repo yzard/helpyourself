@@ -40,8 +40,8 @@ tests/backend_ocr/          镜像 backend_ocr 的测试结构
 tests/ios/                  镜像 iOS 的测试结构
 tests/frontend/             网页客户端及浏览器回归测试
 docs/                       所有计划、设计与验证证据
-playground/backend_api/     API 数据根：config.toml、ocr-key、SQLite、raw 等，不提交
-playground/backend_ocr/     OCR 配置根：config.toml、ocr-key；只读挂载，不提交
+playground/backend_api/     API 数据根：config.toml（含凭据）、SQLite、raw 等，不提交
+playground/backend_ocr/     OCR 配置根：config.toml（含凭据）；只读挂载，不提交
 playground/upload/          人工提供的端到端输入，不提交
 playground/output/          本地运行输出，不提交
 docker/                     两个组件 Dockerfile、Compose、Caddy 配置及入口
@@ -62,11 +62,11 @@ build_ios.sh                 独立 iOS 检查/构建入口
 | security | 会话时长、登录限速、受信代理 |
 | storage | 上传字节与页数上限、临时文件清理策略 |
 | jobs | 各类并发、租约、重试、超时 |
-| ocr | enabled、url、api_key_file、timeout_seconds；连接 backend_ocr |
-| providers.analysis | 独立的地址、模型、密钥文件、超时与能力配置 |
+| ocr | enabled、url、api_key、timeout_seconds；连接 backend_ocr |
+| providers.analysis | 独立的地址、模型、内嵌 api_key、超时与能力配置 |
 | analysis | 阶段 B 启用开关、触发规则 |
 
-配置层面的密钥引用属于 TOML，密钥文件由服务器管理员挂载，不提交仓库、不发给客户端。相对路径统一以配置文件目录为基准；解析后规范化并校验。这是 helpyourself 的明确选择，不声称 momento 已有该行为。首版配置重启生效，不实现动态热更新。
+所有后台服务的配置凭据（API key、token、secret、password）直接内嵌到其 config.toml，不使用凭据文件或环境/CLI 覆盖。API 的 [ocr].api_key 与 OCR 的 [server].api_key 相同；可选分析凭据是 [providers.analysis].api_key，空串仅表示无鉴权接口。配置在启动边界校验，运行时不再读取密钥文件。真实配置使用 0600，不提交仓库、不进镜像或客户端，也不随业务数据 ZIP 导出；账户密码哈希与已签发会话仍保留原业务存储。首版配置重启生效，不实现动态热更新。
 
 OCR 的模型、提示及生成参数归 backend_ocr 配置，客户端与 API 请求不能覆盖。两个服务用独立 Bearer 密钥通信，手机的用户会话不传入 OCR。probe-providers 对 OCR 只检查 /health，不加载模型；分析仍使用合成文字探测。详细配置、推理限额和协议见 [OCR 运维](runbooks/ocr.md)。
 
@@ -97,7 +97,6 @@ CLI 的 data_dir 是 API 的持久根目录；playground 中对应 playground/ba
 ```text
 backend_api/
   config.toml
-  ocr-key
   database.sqlite
   raw/apple_health/<user_id>/<revision_id>.json
   raw/photos/<user_id>/<file_id>
@@ -118,4 +117,4 @@ SQLite 与文件系统不能共用一个事务：上传先写临时文件并校�
 
 删除先让对象不可查询并取消依赖任务，再持久化清理清单，重试删除文件，最终完成清理。不能在仍有原文件时返回“已完全删除”。运行任务提交前检查对象仍存在且版本有效。
 
-停服复制：停止后端及所有写入者，复制整个 API 根目录（包含 config.toml、ocr-key 和仍存在的 SQLite sidecar），在独立目录验证恢复。OCR 根目录另行完整复制；根外的分析密钥、Caddy 配置及证书单独保管。首版不开发在线备份功能；运行中直接复制不作为支持的备份方法。
+停服复制：停止后端及所有写入者，复制整个 API 根目录（包含内嵌凭据的 config.toml 和仍存在的 SQLite sidecar），在独立目录验证恢复。OCR 根目录另行完整复制；Caddy 配置及平台管理的 TLS 证书单独保管。首版不开发在线备份功能；运行中直接复制不作为支持的备份方法。

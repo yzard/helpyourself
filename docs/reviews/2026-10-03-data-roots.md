@@ -1,5 +1,7 @@
 # 数据根目录约定与验证
 
+后续：本日已按用户要求将独立凭据文件转换为 config.toml 内嵌字段，当前契约见[内嵌凭据审查](2026-10-03-embedded-credentials.md)；下文保留目录调整当时的证据。
+
 用户指出原有 `[server].data_dir` 不符合希望采用的 skill 约定。本次按其要求将两个服务统一为显式绝对 `--data-dir` 和固定 `<data-dir>/config.toml`。所参考的规则来自 docker-build 的 `references/receipt-master-config.md`；仅采用数据根、初始化保留和进程身份规则，不引入其收据领域配置、JWT 或 APK 契约。
 
 ## 完成的调整

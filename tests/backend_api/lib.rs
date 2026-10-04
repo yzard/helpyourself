@@ -95,12 +95,7 @@ pub async fn fixture() -> (TempDir, AppState) {
     let path = directory.path().join("config.toml");
     std::fs::write(&path, TEMPLATE).unwrap();
     let mut config = Config::load(directory.path()).unwrap();
-    config.ocr.api_key_file = directory.path().join("ocr-key");
-    std::fs::write(
-        &config.ocr.api_key_file,
-        "synthetic-ocr-service-key-123456789",
-    )
-    .unwrap();
+    config.ocr.api_key = "synthetic-ocr-service-key-123456789".into();
     let state = AppState::open(config).await.unwrap();
     (directory, state)
 }

@@ -56,7 +56,7 @@ pub struct OcrConfig {
     pub enabled: bool,
     pub url: String,
     pub timeout_seconds: u64,
-    pub api_key_file: PathBuf,
+    pub api_key: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -73,7 +73,7 @@ pub struct ProviderConfig {
     pub model: String,
     pub adapter: String,
     pub timeout_seconds: u64,
-    pub api_key_file: Option<PathBuf>,
+    pub api_key: String,
     pub extra_body: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
@@ -89,11 +89,7 @@ impl Config {
         let mut configuration: Self = toml::from_str(&content).map_err(|_| {
             AppError::Invalid("Invalid TOML configuration; check schema and field types")
         })?;
-        configuration.data_dir = directory.clone();
-        configuration.ocr.api_key_file = resolve_path(&directory, &configuration.ocr.api_key_file)?;
-        if let Some(path) = &configuration.providers.analysis.api_key_file {
-            configuration.providers.analysis.api_key_file = Some(resolve_path(&directory, path)?);
-        }
+        configuration.data_dir = directory;
         configuration.validate()?;
         Ok(configuration)
     }
@@ -123,13 +119,17 @@ impl Config {
             return Err(AppError::Invalid("Invalid job limits"));
         }
         validate_url(&self.ocr.url)?;
-        if !(1..=3600).contains(&self.ocr.timeout_seconds)
-            || self.ocr.api_key_file.as_os_str().is_empty()
-        {
-            return Err(AppError::Invalid("Invalid OCR service timeout or key file"));
+        if !(1..=3600).contains(&self.ocr.timeout_seconds) {
+            return Err(AppError::Invalid("Invalid OCR service timeout"));
+        }
+        if self.ocr.enabled || !self.ocr.api_key.is_empty() {
+            validate_key(&self.ocr.api_key, 24)?;
         }
         {
             let provider = &self.providers.analysis;
+            if !provider.api_key.is_empty() {
+                validate_key(&provider.api_key, 1)?;
+            }
             let address = url::Url::parse(&provider.base_url)
                 .map_err(|_| AppError::Invalid("Invalid provider URL"))?;
             if !["http", "https"].contains(&address.scheme())
@@ -165,15 +165,12 @@ impl Config {
     }
 }
 
-fn resolve_path(directory: &Path, path: &Path) -> Result<PathBuf, AppError> {
-    if path.as_os_str().is_empty() {
-        return Err(AppError::Invalid("Configuration paths must not be empty"));
+fn validate_key(key: &str, minimum: usize) -> Result<(), AppError> {
+    if !(minimum..=8192).contains(&key.len()) || !key.bytes().all(|byte| (33..=126).contains(&byte))
+    {
+        return Err(AppError::Invalid("Invalid service API key in TOML"));
     }
-    Ok(if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        directory.join(path)
-    })
+    Ok(())
 }
 
 fn validate_url(value: &str) -> Result<(), AppError> {

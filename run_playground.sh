@@ -11,7 +11,7 @@ export HELPYOURSELF_API_DATA_DIR="$PROJECT_ROOT/playground/backend_api"
 export HELPYOURSELF_OCR_DATA_DIR="$PROJECT_ROOT/playground/backend_ocr"
 export PUID="$(id -u)" PGID="$(id -g)"
 COMPOSE=(docker compose --project-name helpyourself-playground --file "$PROJECT_ROOT/docker/docker-compose.yaml")
-if [ -e "$PROJECT_ROOT/playground/data" ] || [ -e "$PROJECT_ROOT/playground/config.toml" ] || [ -e "$PROJECT_ROOT/playground/backend_ocr.toml" ] || [ -e "$PROJECT_ROOT/playground/secrets/ocr-key" ]; then
+if [ "$(python3 "$PROJECT_ROOT/src/development/data_roots.py" --project "$PROJECT_ROOT" --needs-update)" = yes ]; then
     "${COMPOSE[@]}" stop
 fi
 python3 "$PROJECT_ROOT/src/development/data_roots.py" --project "$PROJECT_ROOT"

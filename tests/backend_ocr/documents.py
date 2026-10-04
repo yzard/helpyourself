@@ -17,8 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def fixture(directory):
     path = Path(directory) / 'config.toml'
-    path.write_text((ROOT / 'src/backend_ocr/config.toml').read_text())
-    (Path(directory) / 'ocr-key').write_text('synthetic-service-key-123456789')
+    path.write_text(
+        (ROOT / 'src/backend_ocr/config.toml')
+        .read_text()
+        .replace('api_key = ""', 'api_key = "synthetic-service-key-123456789"')
+    )
     return load_config(Path(directory))
 
 
@@ -170,14 +173,23 @@ class DocumentTests(unittest.TestCase):
                 content.replace('port = 8002', 'port = 8000'),
                 content.replace('maximum_pending_requests = 4', 'maximum_pending_requests = 0'),
                 content + '\nunknown = 1\n',
+                content.replace('synthetic-service-key-123456789', ''),
+                content.replace('synthetic-service-key-123456789', 'private-short-key'),
+                content.replace('synthetic-service-key-123456789', 'private-key-with spaces-123456789'),
+                content.replace('synthetic-service-key-123456789', 'private-key-with\\r\\nheaders-123456789'),
+                content.replace('synthetic-service-key-123456789', 'x' * 8193),
+                content.replace('api_key =', 'api_key_file ='),
+                content.replace('api_key =', 'api_key = invalid private-'),
             ]:
                 path.write_text(changed)
-                with self.assertRaises(ValueError):
+                with self.assertRaises(ValueError) as failure:
                     load_config(Path(directory))
+                self.assertNotIn('private', str(failure.exception))
+                self.assertNotIn('synthetic-service-key-123456789', str(failure.exception))
             with self.assertRaises(ValueError):
                 load_config(Path('relative/data'))
             with self.assertRaises((ValueError, OSError)):
                 load_config(path)
-            config.server.api_key_file.unlink()
-            with self.assertRaises(FileNotFoundError):
-                create_application(config)
+            self.assertNotIn('synthetic-service-key-123456789', repr(config))
+            self.assertFalse((Path(directory) / 'ocr-key').exists())
+            create_application(config)

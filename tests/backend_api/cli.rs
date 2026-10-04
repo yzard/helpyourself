@@ -5,6 +5,14 @@ use helpyourself::cli::{Cli, Command, write_template};
 fn config_generation_never_overwrites_existing_files() {
     let directory = tempfile::tempdir().unwrap();
     write_template(directory.path()).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = std::fs::metadata(directory.path().join("config.toml"))
+            .unwrap()
+            .permissions();
+        assert_eq!(permissions.mode() & 0o777, 0o600);
+    }
     assert!(write_template(directory.path()).is_err());
     assert!(helpyourself::config::Config::load(directory.path()).is_ok());
     let parsed = Cli::try_parse_from([

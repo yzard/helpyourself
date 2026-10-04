@@ -58,18 +58,28 @@ ocr_root = Path(environment['HELPYOURSELF_OCR_DATA_DIR'])
 for root in (api_root, ocr_root):
     root.mkdir(mode=0o700)
     os.chmod(root, 0o700)
+key = secrets.token_urlsafe(32)
 (api_root / 'config.toml').write_text(
     (ROOT / 'docker/config.toml')
     .read_text()
     .replace('enabled = true', 'enabled = true' if options.ocr else 'enabled = false')
+    .replace(
+        'api_key = "" # Set the shared OCR key here; playground initialization generates it.',
+        'api_key = ' + json.dumps(key),
+    )
 )
-key = secrets.token_urlsafe(32)
-for root in (api_root, ocr_root):
-    (root / 'ocr-key').write_text(key)
-    os.chmod(root / 'ocr-key', 0o600)
 (ocr_root / 'config.toml').write_text(
-    (ROOT / 'src/backend_ocr/config.toml').read_text().replace('idle_timeout_seconds = 300', 'idle_timeout_seconds = 2')
+    (ROOT / 'src/backend_ocr/config.toml')
+    .read_text()
+    .replace('idle_timeout_seconds = 300', 'idle_timeout_seconds = 2')
+    .replace(
+        'api_key = "" # Set the shared OCR key here; playground initialization generates it.',
+        'api_key = ' + json.dumps(key),
+    )
 )
+for root in (api_root, ocr_root):
+    os.chmod(root / 'config.toml', 0o600)
+    assert not (root / 'ocr-key').exists()
 compose = ['docker', 'compose', '-p', PROJECT, '-f', str(ROOT / 'docker/docker-compose.yaml')]
 
 

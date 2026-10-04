@@ -62,9 +62,10 @@ async fn temporary_provider_failure_retries_but_auth_failure_does_not() {
         let counter = attempts.clone();
         let router = axum::Router::new().route(
             "/v1/chat/completions",
-            axum::routing::post(move || {
+            axum::routing::post(move |headers: axum::http::HeaderMap| {
                 let counter = counter.clone();
                 async move {
+                    assert_eq!(headers["authorization"], "Bearer synthetic-analysis-key");
                     if counter.fetch_add(1, Ordering::SeqCst) == 0 {
                         (
                             axum::http::StatusCode::from_u16(code).unwrap(),
@@ -87,6 +88,7 @@ async fn temporary_provider_failure_retries_but_auth_failure_does_not() {
         let mut config: helpyourself::config::Config =
             toml::from_str(helpyourself::config::TEMPLATE).unwrap();
         config.providers.analysis.enabled = true;
+        config.providers.analysis.api_key = "synthetic-analysis-key".into();
         config.providers.analysis.base_url = format!("http://{address}/v1");
         let result = helpyourself::provider::probe(&config.providers.analysis).await;
         assert_eq!(result.is_ok(), code == 429);

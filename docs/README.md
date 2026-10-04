@@ -33,3 +33,5 @@ Web GUI 的范围与拆分见 [网页实施计划](implementation-webgui.md)，�
 已有数据闭环、模型适配、个人分析和部署实现。阅读 [后端运行](runbooks/backend.md)、[iPhone 构建](runbooks/ios.md)、[API 契约](api.md)。[最新全仓库审查](reviews/2026-10-02-server-lifecycle-and-load.md)区分已验证实现、skills 缺口和外部验收；[支持矩阵](validation/support-matrix.md)列出归档粒度与限制。真实健康数据不提交到仓库。
 
 此前目录和构建调整见 [2026-09-27 历史审查](reviews/2026-09-27-structure-audit.md)。其中迁移、schema 版本和测试数量已被本次记录替代。
+
+后台服务全部配置凭据直接内嵌其 config.toml；运行时没有独立密钥文件。当前配置与 skills 更新见[内嵌凭据审查](reviews/2026-10-03-embedded-credentials.md)。
