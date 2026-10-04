@@ -53,7 +53,6 @@ pub struct JobConfig {
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OcrConfig {
-    pub enabled: bool,
     pub url: String,
     pub timeout_seconds: u64,
     pub api_key: String,
@@ -122,9 +121,7 @@ impl Config {
         if !(1..=3600).contains(&self.ocr.timeout_seconds) {
             return Err(AppError::Invalid("Invalid OCR service timeout"));
         }
-        if self.ocr.enabled || !self.ocr.api_key.is_empty() {
-            validate_key(&self.ocr.api_key, 24)?;
-        }
+        validate_key(&self.ocr.api_key, 24)?;
         {
             let provider = &self.providers.analysis;
             if !provider.api_key.is_empty() {

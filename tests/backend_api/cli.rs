@@ -14,6 +14,12 @@ fn config_generation_never_overwrites_existing_files() {
         assert_eq!(permissions.mode() & 0o777, 0o600);
     }
     assert!(write_template(directory.path()).is_err());
+    assert!(helpyourself::config::Config::load(directory.path()).is_err());
+    std::fs::write(
+        directory.path().join("config.toml"),
+        crate::configured_template(),
+    )
+    .unwrap();
     assert!(helpyourself::config::Config::load(directory.path()).is_ok());
     let parsed = Cli::try_parse_from([
         "helpyourself",

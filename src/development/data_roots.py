@@ -116,6 +116,8 @@ def needs_update(project: Path) -> bool:
         if not path.exists() or (root / 'ocr-key').exists():
             return True
         config = tomllib.loads(path.read_text())
+        if service == 'backend_api' and 'enabled' in config.get('ocr', {}):
+            return True
         if not config.get(section, {}).get('api_key'):
             return True
         if any(
@@ -168,6 +170,7 @@ def prepare_locked(project: Path) -> None:
         obsolete.update(paths)
         changes = {(section, 'api_key_file'): None}
         if is_api:
+            changes[('ocr', 'enabled')] = None
             provider_key, paths = embedded_key(source, parsed['providers']['analysis'], project, 1)
             obsolete.update(paths)
             changes.update(

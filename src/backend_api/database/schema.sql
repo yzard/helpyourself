@@ -47,7 +47,7 @@ CREATE TABLE jobs (
     user_id TEXT NOT NULL,
     file_id TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (kind = 'document_extract'),
-    status TEXT NOT NULL CHECK (status IN ('blocked', 'queued', 'running', 'succeeded', 'failed', 'canceled')),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'canceled')),
     attempt_count INTEGER NOT NULL DEFAULT 0,
     lease_token TEXT,
     lease_until INTEGER,

@@ -1,6 +1,6 @@
 # 后端启动与运维
 
-本版本提供报告原件归档、模型提取、人工复核、趋势、健康原始数据同步、完整导出与删除，以及默认关闭的个人血脂分析。具体字段见 [API 契约](../api.md)，服务行为见 [生命周期审查](../reviews/2026-10-02-server-lifecycle-and-load.md)，当前配置约定见 [内嵌凭据审查](../reviews/2026-10-03-embedded-credentials.md)。
+本版本提供报告原件归档、模型提取、人工复核、趋势、健康原始数据同步、完整导出与删除，以及默认关闭的个人血脂分析。具体字段见 [API 契约](../api.md)，服务行为见 [生命周期审查](../reviews/2026-10-02-server-lifecycle-and-load.md)，当前配置约定见 [必要 OCR 服务审查](../reviews/2026-10-03-required-ocr.md)。
 
 ## Playground 启动
 
@@ -17,7 +17,7 @@ docker compose -p helpyourself-playground -f docker/docker-compose.yaml exec --u
 
 建号时隐藏输入密码，长度 12–1024 字节。自动化可用 `--password-stdin` 从安全输入通道传入，不要把密码写进命令行参数。没有默认账户或密码。存在旧 playground/config.toml、data/、backend_ocr.toml 或 secrets/ocr-key 时，脚本先停止自己的 Compose 项目，再迁移目录、配置和稳定密钥；旧配置含 api_key_file 或独立 ocr-key 时也先停服，一次性读取旧值并原子写入 TOML，两份配置确认持久化后才删除项目内旧文件；分析密钥同样内嵌。目标冲突、密钥不一致或活跃数据锁会失败，不覆盖。数据库 sidecar 与原件一并移动，不做 schema 迁移。Playground 直接初始化当前 SQLite schema；脚本不会清空宿主机 data 目录，也不升级旧 schema。
 
-宿主机调试同样显式传入绝对数据目录；初始化只在缺失时写入固定的 config.toml，TOML 不接受 data_dir：
+宿主机调试同样显式传入绝对数据目录；初始化只在缺失时写入固定的 config.toml，TOML 不接受 data_dir。init-config 写入空密钥占位，必须先在 config.toml 填入与 OCR 相同的 api_key 才能通过校验、建号或启动：
 
 ```bash
 cd src/backend_api
@@ -32,12 +32,12 @@ cargo run --locked -- --data-dir /absolute/path/backend_api serve
 
 backend_api 接收原件并持久化任务；backend_ocr 是独立 FastAPI 服务，管理 Qwen3.8 27B NVFP4 + NInfer 推理。PDF 由 API 渲染为逐页 PNG，HEIC 使用已归档的 JPEG 处理副本；原件均留在 API。服务通信、配置和运行限额见 [OCR 运维](ocr.md)。
 
-- API `[ocr]` 配置 `enabled`、`url`、`api_key` 和 `timeout_seconds`。容器示例启用并连接 `http://backend_ocr:8000`，独立宿主机模板默认关闭。
+- API `[ocr]` 配置 `url`、`api_key` 和 `timeout_seconds`。OCR 是必要服务，容器连接 `http://backend_ocr:8000`，宿主机模板连接配置的本地 OCR 地址；URL、有效密钥和超时均须配置。
 - OCR 服务只接受内联 PNG/JPEG，不接受远程 URL、文件路径、任意 messages 或客户端模型配置。当前没有 document_parser 第二阶段。
 - `providers.analysis` 使用独立 OpenAI 兼容 `/v1/chat/completions` 接口，个人血脂分析默认关闭。其模型/extra_body 仍由管理员明确配置，凭据直接写入 `[providers.analysis].api_key`；空串表示该本地接口无需鉴权。
 - OCR 请求不进行 HTTP 层重复调用；重试由 API 持久任务与租约负责。已确认修订不会被重跑覆盖。分析接口的临时错误最多三次调用，间隔 1、2 秒。
 
-在 `src/backend_api/` 执行 `cargo run --locked -- --data-dir /absolute/path/backend_api probe-providers`：OCR 只检查服务存活，不加载模型；分析发送合成文字。该命令不证明视觉识别正确。OCR 关闭时上传与人工复核仍可用，提取任务显示 `blocked / provider_disabled`，启用后重新排队。
+在 `src/backend_api/` 执行 `cargo run --locked -- --data-dir /absolute/path/backend_api probe-providers`：OCR 只检查服务存活，不加载模型；分析发送合成文字。该命令不证明视觉识别正确。OCR 必须配置且 worker 始终运行；上传归档事务直接创建 queued 任务。OCR 暂时不可达时原件仍归档，提取任务显示 failed / extraction_failed，可在服务恢复后重试；不再存在 blocked / provider_disabled 模式。
 
 ## 账户与隔离
 
@@ -94,6 +94,6 @@ docker compose -f docker/docker-compose.yaml config --quiet
 src/backend_ocr/.venv/bin/python tests/docker/deployment.py --ocr --load
 ```
 
-最后一项使用 OCR 组件虚拟环境（见 OCR 运维），启动独立合成测试容器，验证实际 GPU 图片/文字 PDF/扫描与混合 PDF 多单位识别、惰性加载与空闲卸载、HTTPS、归档、复核、趋势、导出、重启和删除；--load 追加并发 32 MiB 单 payload /40 MiB 批次、超限原子拒绝和完整重放，记录 API RSS 与状态延迟，再清理自己的临时卷。省略 --ocr 可只运行 API 部署闭环；两种方式均启动 OCR 容器但只有 --ocr 加载模型。
+最后一项使用 OCR 组件虚拟环境（见 OCR 运维），启动独立合成测试容器，验证实际 GPU 图片/文字 PDF/扫描与混合 PDF 多单位识别、惰性加载与空闲卸载、HTTPS、归档、复核、趋势、导出、重启和删除；--load 追加并发 32 MiB 单 payload /40 MiB 批次、超限原子拒绝和完整重放，记录 API RSS 与状态延迟，再清理自己的临时卷。省略 --ocr 会在上传前停止合成测试的 OCR 容器，核验真实故障下失败任务、原件归档与人工复核；--ocr 才运行真实 GPU 识别。这个测试选项不控制 API 的 OCR 配置或功能。
 
 CPU 或 Health 入口槽满时返回 429，保留相同批次 ID 和内容重试；413 必须缩小请求，不能重试被截断的原始载荷。性能测量写入 build/deployment-check/load-result.json；它是当前机器的短时合成测试结果，不是生产 SLA。当前验证记录见[服务端验收](../reviews/2026-10-02-server-lifecycle-and-load.md)。

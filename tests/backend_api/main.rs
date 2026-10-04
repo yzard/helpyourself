@@ -14,6 +14,11 @@ fn administrator_commands_create_reset_and_disable_without_password_arguments() 
     use std::process::{Command, Stdio};
     let directory = tempfile::tempdir().unwrap();
     helpyourself::cli::write_template(directory.path()).unwrap();
+    std::fs::write(
+        directory.path().join("config.toml"),
+        crate::configured_template(),
+    )
+    .unwrap();
     for operation in ["create-user", "reset-password"] {
         let mut child = Command::new(env!("CARGO_BIN_EXE_helpyourself"))
             .arg("--data-dir")

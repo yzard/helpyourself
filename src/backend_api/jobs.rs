@@ -15,20 +15,6 @@ pub struct ClaimedJob {
 }
 
 impl Database {
-    /// Called only by a capable worker; the HTTP API cannot activate unavailable extraction.
-    pub async fn queue_blocked_job(&self, user_id: &str, job_id: &str) -> Result<(), AppError> {
-        self.job(user_id, job_id).await?;
-        let updated = sqlx::query(queries::QUEUE_BLOCKED_JOB)
-            .bind(user_id)
-            .bind(job_id)
-            .execute(&self.pool)
-            .await?;
-        if updated.rows_affected() != 1 {
-            return Err(AppError::Conflict("Job is not blocked"));
-        }
-        Ok(())
-    }
-
     pub async fn retry_job(&self, user_id: &str, job_id: &str) -> Result<Job, AppError> {
         self.job(user_id, job_id).await?;
         let updated = sqlx::query(queries::RETRY_JOB)
@@ -37,9 +23,7 @@ impl Database {
             .execute(&self.pool)
             .await?;
         if updated.rows_affected() != 1 {
-            return Err(AppError::Conflict(
-                "Only failed jobs can be retried; unavailable extraction cannot run",
-            ));
+            return Err(AppError::Conflict("Only failed jobs can be retried"));
         }
         self.job(user_id, job_id).await
     }

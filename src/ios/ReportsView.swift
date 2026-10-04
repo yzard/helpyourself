@@ -29,7 +29,7 @@ struct ReportsView: View {
                             Text(report["original_name"].stringValue).font(.headline)
                             Text("\(Int(report["page_count"].numberValue ?? 0)) pages · revision \(Int(report["revision"].numberValue ?? 1))").font(.caption).foregroundStyle(.secondary)
                             if let job = model.jobs.first(where: { $0["file_id"] == report["report_id"] }) {
-                                Text(job["status"].stringValue == "blocked" ? "Manual review available · OCR is off" : "Extraction: \(job["status"].stringValue)").font(.caption)
+                                Text("Extraction: \(job["status"].stringValue)").font(.caption)
                             }
                         }.padding(.vertical, 4)
                     }

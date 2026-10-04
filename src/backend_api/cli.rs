@@ -88,12 +88,8 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
         return Ok(());
     }
     if matches!(cli.command, Command::ProbeProviders) {
-        if config.ocr.enabled {
-            crate::ocr::probe(&config.ocr).await?;
-            println!("ocr: service is available (model not loaded, not an accuracy test)");
-        } else {
-            println!("ocr: disabled");
-        }
+        crate::ocr::probe(&config.ocr).await?;
+        println!("ocr: service is available (model not loaded, not an accuracy test)");
         if config.providers.analysis.enabled {
             crate::provider::probe(&config.providers.analysis).await?;
             println!("analysis: synthetic text response received");

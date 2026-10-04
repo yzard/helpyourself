@@ -6,7 +6,6 @@ async fn actual_http_extraction_creates_pending_candidates_with_provenance() {
     let user = add_user(&state, "alice").await;
     let (address, server) = super::provider::mock().await;
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = address.trim_end_matches("/v1").into();
     state.config = std::sync::Arc::new(config);
     let report = archive(&state, "alice").await;
@@ -48,7 +47,6 @@ async fn pdf_rendering_and_independent_ocr_service_create_reviewable_rows() {
     let user = add_user(&state, "alice").await;
     let (address, server) = super::provider::mock().await;
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = address.trim_end_matches("/v1").into();
     state.config = std::sync::Arc::new(config);
     let app = helpyourself::app::create_application(state.clone());
@@ -98,7 +96,6 @@ async fn malformed_ocr_is_archived_before_validation_and_obeys_owner_and_deletio
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = format!("http://{address}");
     state.config = std::sync::Arc::new(config);
     let report_id = archive(&state, "alice").await;
@@ -180,7 +177,6 @@ async fn deleted_report_rejects_late_ocr_and_clears_temporary_images() {
         axum::serve(listener, app).await.unwrap();
     });
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = format!("http://{address}");
     state.config = Arc::new(config);
     let report = archive(&state, "alice").await;
@@ -244,7 +240,6 @@ async fn long_extraction_renews_lease_and_releases_renewal_on_completion() {
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = format!("http://{address}");
     config.jobs.lease_seconds = 3;
     state.config = Arc::new(config);
@@ -348,7 +343,6 @@ async fn complete_ocr_with_review_warnings_succeeds_without_confirming_or_losing
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let mut config = (*state.config).clone();
-    config.ocr.enabled = true;
     config.ocr.url = format!("http://{address}");
     state.config = std::sync::Arc::new(config);
     let report_id = archive(&state, "alice").await;
@@ -385,4 +379,57 @@ async fn complete_ocr_with_review_warnings_succeeds_without_confirming_or_losing
             .is_empty()
     );
     server.abort();
+}
+
+#[tokio::test]
+async fn required_ocr_outage_fails_retryably_without_losing_the_original() {
+    let (_directory, mut state) = fixture().await;
+    let user = add_user(&state, "alice").await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let mut config = (*state.config).clone();
+    config.ocr.url = format!("http://{address}");
+    state.config = std::sync::Arc::new(config);
+    let report_id = archive(&state, "alice").await;
+    let job = state
+        .database
+        .job_by_file(&user.user_id, &report_id)
+        .await
+        .unwrap();
+    assert_eq!(job.status, "queued");
+    assert!(job.error_code.is_none());
+    assert!(helpyourself::worker::extract_next(&state).await.unwrap());
+    let failed = state
+        .database
+        .job(&user.user_id, &job.job_id)
+        .await
+        .unwrap();
+    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.error_code.as_deref(), Some("extraction_failed"));
+    let original = state
+        .database
+        .file(&user.user_id, &report_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        tokio::fs::read(state.config.data_dir.join(original.relative_path))
+            .await
+            .unwrap(),
+        crate::png()
+    );
+    let app = helpyourself::app::create_application(state.clone());
+    let (status, capabilities) =
+        crate::request(&app, "/api/v1/server/status", None, serde_json::json!({})).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    assert_eq!(capabilities["capabilities"]["document_extraction"], true);
+    assert_eq!(
+        state
+            .database
+            .retry_job(&user.user_id, &job.job_id)
+            .await
+            .unwrap()
+            .status,
+        "queued"
+    );
 }

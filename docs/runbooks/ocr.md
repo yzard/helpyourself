@@ -51,6 +51,8 @@ src/backend_ocr/.venv/bin/python -m unittest discover -s tests/backend_ocr -p '*
 src/backend_ocr/.venv/bin/python tests/docker/deployment.py --ocr --load
 ```
 
-Docker 构建关口运行 Rust fmt/Clippy/74 项测试、Python isort/Black/10 项 OCR 测试、13 项开发脚本测试及 11 项前端测试。最后一个命令以隔离配置、随机端口、容器和临时卷完成真实 GPU 合成图片、文字 PDF、两页扫描/混合 PDF 的多单位识别及 HTTPS 数据闭环；--load 同时核验 Health 大载荷准入、原始重放、超限及响应性，结束清理自己的资源。未提供任何真实健康报告输入，不能据此标记临床准确性或 iPhone 真机验收完成。
+Docker 构建关口运行 Rust fmt/Clippy/75 项测试、Python isort/Black/10 项 OCR 测试、13 项开发脚本测试及 11 项前端测试。最后一个命令以隔离配置、随机端口、容器和临时卷完成真实 GPU 合成图片、文字 PDF、两页扫描/混合 PDF 的多单位识别及 HTTPS 数据闭环；--load 同时核验 Health 大载荷准入、原始重放、超限及响应性，结束清理自己的资源。未提供任何真实健康报告输入，不能据此标记临床准确性或 iPhone 真机验收完成。
 
 所有 background service 配置凭据直接内嵌到 config.toml，禁止凭据文件与环境/CLI 密钥覆盖。示例与验收见[内嵌凭据审查](../reviews/2026-10-03-embedded-credentials.md)。模板的空 OCR 密钥必须配置后才可启动 OCR；Playground 初始化会生成匹配的有效密钥。OCR 配置对象隐藏密钥表示，非法配置错误不输出原值。
+
+OCR 是 API 的必要服务：[ocr] 没有 enabled，所有上传在归档事务内直接排队，worker 始终尝试提取；原件和人工复核在 OCR 临时故障时继续可用。有效 URL 与内嵌密钥必须在启动时校验，不能通过开关跳过。详见[必要 OCR 服务审查](../reviews/2026-10-03-required-ocr.md)。

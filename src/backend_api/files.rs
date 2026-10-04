@@ -209,15 +209,6 @@ pub async fn receive_upload(
             return Err(error);
         }
     };
-    let job = if state.config.ocr.enabled {
-        state
-            .database
-            .queue_blocked_job(user_id, &job.job_id)
-            .await?;
-        state.database.job(user_id, &job.job_id).await?
-    } else {
-        job
-    };
     Ok(UploadResponse {
         file,
         job,

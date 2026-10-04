@@ -112,6 +112,7 @@ class DataRootTests(unittest.TestCase):
                     )
                 )
                 if service == 'backend_api':
+                    content = content.replace('[ocr]', '[ocr]\nenabled = false')
                     content = content.replace(
                         'api_key = "" # Empty only for a provider that needs no authentication.',
                         'api_key_file = "analysis-key"',
@@ -126,6 +127,8 @@ class DataRootTests(unittest.TestCase):
             data_roots.prepare(project)
             self.assertEqual(config(api)['ocr']['api_key'], KEY)
             self.assertEqual(config(ocr)['server']['api_key'], KEY)
+            self.assertNotIn('enabled', config(api)['ocr'])
+            self.assertFalse(config(api)['providers']['analysis']['enabled'])
             self.assertEqual(config(api)['providers']['analysis']['api_key'], 'synthetic-provider-\\"-key')
             self.assertEqual(original.read_bytes(), b'unchanged synthetic database')
             for root in [api, ocr]:

@@ -293,9 +293,9 @@ impl Database {
             job_id,
             file_id: file.file_id.clone(),
             kind: "document_extract".into(),
-            status: "blocked".into(),
+            status: "queued".into(),
             attempt_count: 0,
-            error_code: Some("provider_disabled".into()),
+            error_code: None,
             created_at: file.created_at,
         })
     }

@@ -17,7 +17,6 @@ lease_seconds = 120
 maximum_attempts = 3
 
 [ocr]
-enabled = true
 url = "http://backend_ocr:8000"
 timeout_seconds = 660
 api_key = "" # Set the shared OCR key here; playground initialization generates it.

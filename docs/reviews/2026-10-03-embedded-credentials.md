@@ -1,5 +1,7 @@
 # 后台服务凭据内嵌 TOML
 
+后续：本日进一步移除 OCR enabled 开关，URL 与内嵌密钥始终必填，上传直接排队，见[必要 OCR 服务审查](2026-10-03-required-ocr.md)；下文保留凭据调整当时的记录。
+
 日期：2026-10-03。用户要求所有后台服务配置中的 keys、passwords、tokens 和 secrets 直接内嵌到 config.toml，同时将约束写入 skills。本轮统一 helpyourself API、OCR 和分析适配器的配置，保留现有 `--data-dir ABSOLUTE_DIRECTORY`、各服务根目录与 SQLite 业务数据，不做 schema migration。
 
 ## 配置与运行契约

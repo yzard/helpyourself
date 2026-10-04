@@ -62,7 +62,7 @@ build_ios.sh                 独立 iOS 检查/构建入口
 | security | 会话时长、登录限速、受信代理 |
 | storage | 上传字节与页数上限、临时文件清理策略 |
 | jobs | 各类并发、租约、重试、超时 |
-| ocr | enabled、url、api_key、timeout_seconds；连接 backend_ocr |
+| ocr | url、api_key、timeout_seconds；必须连接 backend_ocr，无启停开关 |
 | providers.analysis | 独立的地址、模型、内嵌 api_key、超时与能力配置 |
 | analysis | 阶段 B 启用开关、触发规则 |
 

@@ -2,7 +2,7 @@ use crate::{add_user, fixture, png, token, upload};
 use helpyourself::{app::create_application, error::AppError};
 
 #[tokio::test]
-async fn jobs_are_isolated_and_unavailable_extraction_stays_blocked() {
+async fn jobs_are_queued_on_upload_and_isolated_without_retrying_queued_work() {
     let (_directory, state) = fixture().await;
     let alice = add_user(&state, "alice").await;
     let bob = add_user(&state, "bob").await;
@@ -15,7 +15,8 @@ async fn jobs_are_isolated_and_unavailable_extraction_stays_blocked() {
     )
     .await;
     let job_id = response["job"]["job_id"].as_str().unwrap();
-    assert_eq!(response["job"]["status"], "blocked");
+    assert_eq!(response["job"]["status"], "queued");
+    assert!(response["job"]["error_code"].is_null());
     assert!(matches!(
         state.database.job(&bob.user_id, job_id).await,
         Err(AppError::NotFound)
@@ -27,13 +28,15 @@ async fn jobs_are_isolated_and_unavailable_extraction_stays_blocked() {
             .await
             .is_err()
     );
-    assert!(
+    assert_eq!(
         state
             .database
             .claim_job(100, 10, 3)
             .await
             .unwrap()
-            .is_none()
+            .unwrap()
+            .job_id,
+        job_id
     );
 }
 
@@ -50,11 +53,6 @@ async fn expired_lease_cannot_overwrite_new_worker_and_attempts_are_bounded() {
     )
     .await;
     let job_id = response["job"]["job_id"].as_str().unwrap();
-    state
-        .database
-        .queue_blocked_job(&user.user_id, job_id)
-        .await
-        .unwrap();
     let first = state.database.claim_job(100, 10, 2).await.unwrap().unwrap();
     assert!(
         state

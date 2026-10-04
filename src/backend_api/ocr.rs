@@ -24,9 +24,6 @@ pub async fn extract(
     image_url: String,
     text_layer: Option<crate::documents::TextLayer>,
 ) -> Result<Completion, AppError> {
-    if !config.enabled {
-        return Err(AppError::Invalid("OCR service is disabled"));
-    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())

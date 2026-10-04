@@ -93,11 +93,18 @@ use tower::ServiceExt;
 pub async fn fixture() -> (TempDir, AppState) {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("config.toml");
-    std::fs::write(&path, TEMPLATE).unwrap();
-    let mut config = Config::load(directory.path()).unwrap();
-    config.ocr.api_key = "synthetic-ocr-service-key-123456789".into();
+    std::fs::write(&path, configured_template()).unwrap();
+    let config = Config::load(directory.path()).unwrap();
     let state = AppState::open(config).await.unwrap();
     (directory, state)
+}
+
+pub fn configured_template() -> String {
+    TEMPLATE.replacen(
+        "api_key = \"\"",
+        "api_key = \"synthetic-ocr-service-key-123456789\"",
+        1,
+    )
 }
 
 pub async fn add_user(state: &AppState, username: &str) -> helpyourself::models::User {

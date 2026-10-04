@@ -62,7 +62,6 @@ key = secrets.token_urlsafe(32)
 (api_root / 'config.toml').write_text(
     (ROOT / 'docker/config.toml')
     .read_text()
-    .replace('enabled = true', 'enabled = true' if options.ocr else 'enabled = false')
     .replace(
         'api_key = "" # Set the shared OCR key here; playground initialization generates it.',
         'api_key = ' + json.dumps(key),
@@ -436,6 +435,8 @@ try:
         image.save(output, format='PNG')
         raw = output.getvalue()
     else:
+        # OCR is mandatory. Lightweight checks exercise a real outage without loading the GPU.
+        command(compose + ['stop', 'backend_ocr'])
         raw = png()
     payload = (
         b'--check\r\nContent-Disposition: form-data; name="file"; filename="synthetic.png"\r\nContent-Type: image/png\r\n\r\n'
@@ -454,6 +455,15 @@ try:
     assert (api_root / raw_path).stat().st_uid == os.getuid()
     current = api('reports/get', {'report_id': report})
     recognized = None
+    if not options.ocr:
+
+        def failed_during_outage():
+            job = api('jobs/get', {'job_id': archive['job']['job_id']})
+            assert job['status'] == 'failed', job['status']
+            return job
+
+        eventually(failed_during_outage, 60)
+        current = api('reports/get', {'report_id': report})
     if options.ocr:
 
         def extracted():
@@ -757,6 +767,7 @@ try:
     assert not api('reports/list', {'limit': 100})['reports']
     command(compose + ['stop', 'backend_ocr'])
     assert api('server/status')['capabilities']['review']
+    assert api('server/status')['capabilities']['document_extraction']
     api('user/delete', {'confirmation': 'synthetic'})
     result = {
         'https_with_trusted_test_ca': True,

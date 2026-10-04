@@ -94,7 +94,6 @@ pub const EXPORT_GET: &str = "SELECT status FROM exports WHERE user_id = ? AND e
 pub const CLAIM_EXPORT: &str = "UPDATE exports SET status = 'running' WHERE export_id = (SELECT export_id FROM exports WHERE status = 'queued' ORDER BY created_at LIMIT 1) RETURNING export_id, user_id";
 pub const FINISH_EXPORT: &str = "UPDATE exports SET status = ?, error_code = ? WHERE user_id = ? AND export_id = ? AND status = 'running'";
 pub const RECOVER_EXPORTS: &str = "UPDATE exports SET status = 'queued' WHERE status = 'running'";
-pub const ACTIVATE_EXTRACTION: &str = "UPDATE jobs SET status = 'queued', error_code = NULL WHERE kind = 'document_extract' AND status = 'blocked'";
 pub const VERIFY_JOB_LEASE: &str = "SELECT COUNT(*) FROM jobs WHERE user_id = ? AND job_id = ? AND lease_token = ? AND status = 'running' AND lease_until > ?";
 pub const CREATE_CONNECTION: &str = "INSERT INTO health_connections (connection_id, user_id, platform, installation_id, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (user_id, platform, installation_id) DO NOTHING";
 pub const CONNECTION_BY_INSTALLATION: &str = "SELECT connection_id, platform, installation_id FROM health_connections WHERE user_id = ? AND platform = ? AND installation_id = ?";
@@ -352,8 +351,8 @@ VALUES (?
      , ?
      , ?
      , 'document_extract'
-     , 'blocked'
-     , 'provider_disabled'
+     , 'queued'
+     , NULL
      , ?)
 "#;
 
@@ -406,15 +405,6 @@ UPDATE jobs
  WHERE user_id = ?
    AND job_id = ?
    AND status = 'failed'
-"#;
-
-pub const QUEUE_BLOCKED_JOB: &str = r#"
-UPDATE jobs
-   SET status = 'queued'
-     , error_code = NULL
- WHERE user_id = ?
-   AND job_id = ?
-   AND status = 'blocked'
 "#;
 
 pub const EXHAUST_JOBS: &str = r#"

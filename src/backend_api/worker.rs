@@ -63,9 +63,6 @@ async fn extraction_loop(state: AppState) {
     let mut tick = tokio::time::interval(Duration::from_secs(2));
     loop {
         tick.tick().await;
-        if !state.config.ocr.enabled {
-            continue;
-        }
         if let Err(error) = extract_next(&state).await {
             tracing::warn!(code=%error,"document task could not finish");
         }
@@ -73,9 +70,6 @@ async fn extraction_loop(state: AppState) {
 }
 
 pub async fn extract_next(state: &AppState) -> Result<bool, AppError> {
-    sqlx::query(queries::ACTIVATE_EXTRACTION)
-        .execute(&state.database.pool)
-        .await?;
     let Some(job) = state
         .database
         .claim_job(
