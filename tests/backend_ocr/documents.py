@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def fixture(directory):
     path = Path(directory) / 'config.toml'
-    path.write_text((ROOT / 'src/backend_ocr/config.toml').read_text().replace('/secrets/ocr-key', 'ocr-key'))
+    path.write_text((ROOT / 'src/backend_ocr/config.toml').read_text())
     (Path(directory) / 'ocr-key').write_text('synthetic-service-key-123456789')
-    return load_config(path)
+    return load_config(Path(directory))
 
 
 def image_url():
@@ -165,13 +165,19 @@ class DocumentTests(unittest.TestCase):
             path = Path(directory) / 'config.toml'
             content = path.read_text()
             for changed in [
+                'data_dir = "/data"\n' + content,
+                content.replace('[server]', '[server]\ndata_dir = "/data"'),
                 content.replace('port = 8002', 'port = 8000'),
                 content.replace('maximum_pending_requests = 4', 'maximum_pending_requests = 0'),
                 content + '\nunknown = 1\n',
             ]:
                 path.write_text(changed)
                 with self.assertRaises(ValueError):
-                    load_config(path)
+                    load_config(Path(directory))
+            with self.assertRaises(ValueError):
+                load_config(Path('relative/data'))
+            with self.assertRaises((ValueError, OSError)):
+                load_config(path)
             config.server.api_key_file.unlink()
             with self.assertRaises(FileNotFoundError):
                 create_application(config)

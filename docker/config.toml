@@ -1,6 +1,5 @@
 [server]
 listen = "0.0.0.0:8080"
-data_dir = "/data"
 
 [security]
 session_ttl_seconds = 86400
@@ -21,7 +20,7 @@ maximum_attempts = 3
 enabled = true
 url = "http://backend_ocr:8000"
 timeout_seconds = 660
-api_key_file = "/secrets/ocr-key"
+api_key_file = "ocr-key"
 
 [providers.analysis]
 enabled = false

@@ -48,13 +48,18 @@ class Config(BaseModel):
         return self
 
 
-def load_config(path: Path) -> Config:
-    path = path.resolve(strict=True)
+def load_config(data_dir: Path) -> Config:
+    if not data_dir.is_absolute():
+        raise ValueError('--data-dir must be an absolute directory')
+    directory = data_dir.resolve(strict=True)
+    if not directory.is_dir():
+        raise ValueError('--data-dir must be a directory')
+    path = directory / 'config.toml'
     config = Config.model_validate(tomllib.loads(path.read_text()))
     for owner, name in [(config.server, 'api_key_file'), (config.engine, 'path')]:
         value = getattr(owner, name)
         if not value.is_absolute():
-            setattr(owner, name, path.parent / value)
+            setattr(owner, name, directory / value)
     return config
 
 

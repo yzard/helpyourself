@@ -1,6 +1,6 @@
 # helpyourself 设计与实施计划
 
-更新：2026-10-02。状态：本地 API、SQLite、来源分类原件归档与独立 Qwen3.8/NInfer OCR 已实现，服务端生命周期、并发负载及真实 GPU 合成图片/文字/扫描/混合 PDF 验证通过；真实样本/Apple SDK 真机验收尚未完成。数据库采用当前 schema，不提供历史迁移。
+更新：2026-10-03。状态：本地 API、SQLite、来源分类原件归档、独立 Qwen3.8/NInfer OCR 和随 API 交付的 Web GUI 已实现，服务端生命周期、并发负载及真实 GPU 合成图片/文字/扫描/混合 PDF 验证通过；真实样本/Apple SDK 真机验收尚未完成。数据库采用当前 schema，不提供历史迁移。
 
 helpyourself 是可自托管的个人健康档案与分析系统。先把报告和健康平台明细变成可信、可追溯的数据，再验证主动健康风险发现。
 
@@ -22,6 +22,11 @@ helpyourself 是可自托管的个人健康档案与分析系统。先把报告�
 - 所有后续设计、接口规格和验收记录继续放在 `docs/`。
 
 ## 当前交付
+
+Web GUI 的范围与拆分见 [网页实施计划](implementation-webgui.md)，使用与验收见 [网页运行](runbooks/webgui.md)。页面随 API 镜像交付，移动端继续负责导入和平台读写。
+本次网页的实现、验证和审查见 [Web GUI 验证记录](reviews/2026-10-03-webgui.md)。
+
+两个服务的 `--data-dir`、固定 config.toml、独立挂载及旧 Playground 布局迁移见 [数据根目录验证记录](reviews/2026-10-03-data-roots.md)。
 
 文档与单位补齐见 [计划及逐项状态](implementation-document-units.md)、[转换契约与依据](laboratory-units.md)。
 

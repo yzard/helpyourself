@@ -5,7 +5,7 @@ fn executable_requires_explicit_configuration() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("--config PATH is required"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--data-dir"));
 }
 
 #[test]
@@ -13,12 +13,11 @@ fn administrator_commands_create_reset_and_disable_without_password_arguments() 
     use std::io::Write;
     use std::process::{Command, Stdio};
     let directory = tempfile::tempdir().unwrap();
-    let config = directory.path().join("config.toml");
-    helpyourself::cli::write_template(&config).unwrap();
+    helpyourself::cli::write_template(directory.path()).unwrap();
     for operation in ["create-user", "reset-password"] {
         let mut child = Command::new(env!("CARGO_BIN_EXE_helpyourself"))
-            .arg("--config")
-            .arg(&config)
+            .arg("--data-dir")
+            .arg(directory.path())
             .args([operation, "--username", "alice", "--password-stdin"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -41,8 +40,8 @@ fn administrator_commands_create_reset_and_disable_without_password_arguments() 
     }
     assert!(
         Command::new(env!("CARGO_BIN_EXE_helpyourself"))
-            .arg("--config")
-            .arg(&config)
+            .arg("--data-dir")
+            .arg(directory.path())
             .args(["disable-user", "--username", "alice"])
             .output()
             .unwrap()

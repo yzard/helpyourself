@@ -2,6 +2,8 @@
 
 前缀 `/api/v1/`；除下载 GET 外均 POST。JSON 为 snake_case。仅 `server/status` 和 `session/login` 无需会话，其余需 `Authorization: Bearer <token>`。未列出的字段不接受，不能传 user_id。ISO 日期支持 `YYYY-MM-DD` 或带时区 RFC3339，健康明细时间为 Unix 整数秒；iPhone payload 同时保存原始小数秒。
 
+API 同时通过 `GET /` 和固定 `/assets/{app.css,app.mjs,client.mjs,presentation.mjs}` 提供嵌入式 Web GUI；这些页面资源公开，数据读取继续使用上述认证。未知路由仍返回 JSON 404，不用网页覆盖 API 错误。[网页范围](runbooks/webgui.md)限定为浏览与现有血脂 AI 预设，导入和健康平台读写由移动端承担。
+
 | 组件/操作 | 请求 | 返回 |
 | --- | --- | --- |
 | server/status | {} | status、api_version、capabilities |

@@ -11,9 +11,7 @@ services:
       UMASK: "077"
       TZ: "${TZ:-UTC}"
     volumes:
-      - ${HELPYOURSELF_CONFIG:-./config.toml}:/config/config.toml:ro
-      - ${HELPYOURSELF_DATA_DIR:-helpyourself-data}:/data
-      - ${HELPYOURSELF_OCR_KEY_FILE:-../playground/secrets/ocr-key}:/secrets/ocr-key:ro
+      - ${HELPYOURSELF_API_DATA_DIR:-../playground/backend_api}:/data
     expose: ["8080"]
     networks: [ingress, inference]
     stop_grace_period: 30s
@@ -29,8 +27,7 @@ services:
       UMASK: "077"
       TZ: "${TZ:-UTC}"
     volumes:
-      - ${HELPYOURSELF_OCR_CONFIG:-../src/backend_ocr/config.toml}:/config/config.toml:ro
-      - ${HELPYOURSELF_OCR_KEY_FILE:-../playground/secrets/ocr-key}:/secrets/ocr-key:ro
+      - ${HELPYOURSELF_OCR_DATA_DIR:-../playground/backend_ocr}:/data:ro
     deploy:
       resources:
         reservations:
@@ -60,6 +57,5 @@ networks:
   inference:
     internal: true
 volumes:
-  helpyourself-data:
   caddy-data:
   caddy-config:

@@ -2,6 +2,8 @@
 !src/
 !src/backend_api/
 !src/backend_api/**
+!src/frontend/
+!src/frontend/**
 !docker/
 !docker/entrypoint.sh
 

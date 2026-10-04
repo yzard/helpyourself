@@ -157,7 +157,6 @@ async fn evidence_is_archived_exported_owner_scoped_and_deleted_with_report() {
         .unwrap();
     let path = state
         .config
-        .server
         .data_dir
         .join(format!("exports/{}/{export}.zip", alice.user_id));
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();

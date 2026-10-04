@@ -13,6 +13,7 @@ flowchart LR
     O --> N[Qwen3.8 27B / NInfer / GPU]
     J --> A[健康分析服务 / OpenAI 兼容 API]
     G[未来 Android / Health Connect] --> C
+    W[Web GUI / 浏览与 AI 预设] --> C
 ```
 
 用户于 2026-10-01 指定两个独立后端。backend_api 管理手机会话、SQLite、原件、任务、复核和导出；backend_ocr 只接收 API 提交的页面图像，运行 Qwen3.8 + NInfer 并返回结构化结果及完整原生回复。OCR 不访问 SQLite 或 API data。分析仍是 API 配置的独立模型接口。SQLite 只允许一个 API 服务实例，不承担多实例协调。
@@ -32,13 +33,15 @@ flowchart LR
 ```text
 src/backend_api/                 Rust 服务及 Cargo.toml/Cargo.lock/.cargo、当前 schema、任务与计算模块
 src/ios/                    iPhone 界面、HealthKit、缓存及网络模块
+src/frontend/               Web GUI 静态源文件，由 API 编译时嵌入
 src/backend_ocr/             Python FastAPI 应用、NInfer 生命周期、配置、pyproject.toml/uv.lock
 tests/backend_api/          镜像 backend_api 的测试结构
 tests/backend_ocr/          镜像 backend_ocr 的测试结构
 tests/ios/                  镜像 iOS 的测试结构
+tests/frontend/             网页客户端及浏览器回归测试
 docs/                       所有计划、设计与验证证据
-playground/config.toml      本地完整运行示例，无真实密钥
-playground/data/            本地服务运行数据，不提交
+playground/backend_api/     API 数据根：config.toml、ocr-key、SQLite、raw 等，不提交
+playground/backend_ocr/     OCR 配置根：config.toml、ocr-key；只读挂载，不提交
 playground/upload/          人工提供的端到端输入，不提交
 playground/output/          本地运行输出，不提交
 docker/                     两个组件 Dockerfile、Compose、Caddy 配置及入口
@@ -51,11 +54,11 @@ build_ios.sh                 独立 iOS 检查/构建入口
 
 ## TOML 配置
 
-沿用 momento 的显式 `--config PATH`、分节配置、强类型解析、启动校验和统一 data_dir。配置文件不存在、字段无效时启动失败；模板生成是显式操作。本项目不复制 momento 的内部模型运行布局。
+两个服务要求显式 `--data-dir ABSOLUTE_DIRECTORY`，只读取根内固定的 `config.toml`；TOML 不允许 data_dir 或第二配置位置。保持分节配置、强类型解析和启动校验。配置文件不存在、字段无效时启动失败；模板生成是显式操作。本项目不复制 momento 的内部模型运行布局。
 
 | 配置节 | 主要内容 |
 | --- | --- |
-| server | HTTP 监听、data_dir、公共入口地址 |
+| server | HTTP 监听；数据根目录由 CLI 传入 |
 | security | 会话时长、登录限速、受信代理 |
 | storage | 上传字节与页数上限、临时文件清理策略 |
 | jobs | 各类并发、租约、重试、超时 |
@@ -79,18 +82,22 @@ TemporaryFiles 注册上传、raw 暂存、OCR scratch 与导出暂存路径。�
 
 管理员命令创建、禁用账户及重置凭据；首版无开放注册和管理员浏览健康数据界面。密码使用成熟密码哈希方案，登录发放可撤销会话，客户端凭据存在系统安全存储。
 
+Web GUI 使用同一 Bearer API，会话仅保存在当前页面内存。网页提供浏览与服务器 AI 预设，不包含导入、复核修改或 HealthKit/Health Connect 读写。前端能力限制不改变既有会话的服务器权限。根页面及固定 assets 路由公开，数据接口继续认证；静态资源、原件和数据均不缓存。
+
 认证中间件提供当前 user_id；客户端提交的归属不能替代认证。所有仓储查询、任务、原文件下载、同步、导出和删除都校验归属。跨资源关系使用包含 user_id 的约束，避免单凭资源 ID 关联其他用户对象。
 
 多用户隔离不意味着服务器管理员无法读取磁盘；当前不承诺对自托管管理员的端到端加密。原文、健康值、密码与模型密钥不写入普通日志。
 
 ## 部署与文件一致性
 
-外部客户端使用 HTTPS 到 Caddy，Caddy 转发内部 HTTP。后端端口不直接暴露公网；代理地址受控，不信任任意转发身份头。Compose 挂载配置、密钥和持久 data 目录；Compose 同时运行 API、OCR 和 Caddy。OCR 仅在 internal inference 网络开放 8000，无宿主机端口；NInfer 仅监听 OCR 容器内 127.0.0.1:8002。OCR 故障不阻止 API 上传归档和人工复核。
+外部客户端使用 HTTPS 到 Caddy，Caddy 转发内部 HTTP。后端端口不直接暴露公网；代理地址受控，不信任任意转发身份头。Compose 将两个服务各自的根目录挂载为 `/data`，配置和 OCR 密钥位于各自根内；Compose 同时运行 API、OCR 和 Caddy。OCR 仅在 internal inference 网络开放 8000，无宿主机端口；NInfer 仅监听 OCR 容器内 127.0.0.1:8002。OCR 故障不阻止 API 上传归档和人工复核。
 
-data_dir 是 API 的持久根目录；playground 中对应 playground/data。实际布局如下：
+CLI 的 data_dir 是 API 的持久根目录；playground 中对应 playground/backend_api。OCR 独立根为 playground/backend_ocr，只保存其配置与密钥，不保存 API 数据。实际布局如下：
 
 ```text
-data/
+backend_api/
+  config.toml
+  ocr-key
   database.sqlite
   raw/apple_health/<user_id>/<revision_id>.json
   raw/photos/<user_id>/<file_id>
@@ -111,4 +118,4 @@ SQLite 与文件系统不能共用一个事务：上传先写临时文件并校�
 
 删除先让对象不可查询并取消依赖任务，再持久化清理清单，重试删除文件，最终完成清理。不能在仍有原文件时返回“已完全删除”。运行任务提交前检查对象仍存在且版本有效。
 
-停服复制：停止后端及所有写入者，复制整个 data 目录（若有 SQLite sidecar 文件也一并保留），在独立目录验证恢复。配置与外部模型密钥单独保管，复制 data 不等于复制部署配置。首版不开发在线备份功能；运行中直接复制不作为支持的备份方法。
+停服复制：停止后端及所有写入者，复制整个 API 根目录（包含 config.toml、ocr-key 和仍存在的 SQLite sidecar），在独立目录验证恢复。OCR 根目录另行完整复制；根外的分析密钥、Caddy 配置及证书单独保管。首版不开发在线备份功能；运行中直接复制不作为支持的备份方法。

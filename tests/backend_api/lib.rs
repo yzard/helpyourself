@@ -24,6 +24,7 @@ mod reports;
 mod routes;
 mod temporary;
 mod transport;
+mod webgui;
 mod worker;
 
 pub fn observation_payload() -> helpyourself::reports::ObservationPayload {
@@ -93,7 +94,7 @@ pub async fn fixture() -> (TempDir, AppState) {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("config.toml");
     std::fs::write(&path, TEMPLATE).unwrap();
-    let mut config = Config::load(&path).unwrap();
+    let mut config = Config::load(directory.path()).unwrap();
     config.ocr.api_key_file = directory.path().join("ocr-key");
     std::fs::write(
         &config.ocr.api_key_file,

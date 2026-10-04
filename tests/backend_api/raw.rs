@@ -80,7 +80,7 @@ async fn raw_health_is_indexed_replayable_exported_isolated_and_deleted() {
         } else {
             "raw/google_health/"
         }));
-        let bytes = std::fs::read(state.config.server.data_dir.join(path)).unwrap();
+        let bytes = std::fs::read(state.config.data_dir.join(path)).unwrap();
         assert_eq!(
             serde_json::from_slice::<Value>(&bytes).unwrap(),
             serde_json::to_value(&record).unwrap()
@@ -109,7 +109,6 @@ async fn raw_health_is_indexed_replayable_exported_isolated_and_deleted() {
             .unwrap();
         let export_path = state
             .config
-            .server
             .data_dir
             .join(format!("exports/{}/{export}.zip", user.user_id));
         let mut zip = zip::ZipArchive::new(std::fs::File::open(export_path).unwrap()).unwrap();
@@ -138,7 +137,7 @@ async fn raw_health_is_indexed_replayable_exported_isolated_and_deleted() {
                 .is_err()
         );
         helpyourself::maintenance::cleanup(&state).await.unwrap();
-        assert!(!state.config.server.data_dir.join(path).exists());
+        assert!(!state.config.data_dir.join(path).exists());
     }
 }
 

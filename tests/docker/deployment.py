@@ -26,6 +26,7 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 PROJECT = 'helpyourself-check-' + uuid.uuid4().hex[:8]
 parser = argparse.ArgumentParser()
 parser.add_argument('--ocr', action='store_true', help='Run actual Qwen3.8/NInfer GPU inference on a synthetic page')
+parser.add_argument('--webgui', type=Path, help='Run browser checks with the given Playwright index.mjs module')
 parser.add_argument(
     '--load',
     action='store_true',
@@ -43,23 +44,30 @@ def free_port():
 http_port, https_port = free_port(), free_port()
 environment = dict(
     os.environ,
-    HELPYOURSELF_CONFIG=str(OUTPUT / (PROJECT + '-config.toml')),
-    HELPYOURSELF_OCR_KEY_FILE=str(OUTPUT / (PROJECT + '-ocr-key')),
-    HELPYOURSELF_OCR_CONFIG=str(OUTPUT / (PROJECT + '-ocr-config.toml')),
-    HELPYOURSELF_DATA_DIR='helpyourself-data',
+    HELPYOURSELF_API_DATA_DIR=str(OUTPUT / (PROJECT + '-api')),
+    HELPYOURSELF_OCR_DATA_DIR=str(OUTPUT / (PROJECT + '-ocr')),
+    PUID=str(os.getuid()),
+    PGID=str(os.getgid()),
     HELPYOURSELF_BIND_ADDRESS='127.0.0.1',
     HELPYOURSELF_DOMAIN='localhost',
     HELPYOURSELF_HTTP_PORT=str(http_port),
     HELPYOURSELF_HTTPS_PORT=str(https_port),
 )
-Path(environment['HELPYOURSELF_CONFIG']).write_text(
+api_root = Path(environment['HELPYOURSELF_API_DATA_DIR'])
+ocr_root = Path(environment['HELPYOURSELF_OCR_DATA_DIR'])
+for root in (api_root, ocr_root):
+    root.mkdir(mode=0o700)
+    os.chmod(root, 0o700)
+(api_root / 'config.toml').write_text(
     (ROOT / 'docker/config.toml')
     .read_text()
     .replace('enabled = true', 'enabled = true' if options.ocr else 'enabled = false')
 )
-Path(environment['HELPYOURSELF_OCR_KEY_FILE']).write_text(secrets.token_urlsafe(32))
-os.chmod(environment['HELPYOURSELF_OCR_KEY_FILE'], 0o600)
-Path(environment['HELPYOURSELF_OCR_CONFIG']).write_text(
+key = secrets.token_urlsafe(32)
+for root in (api_root, ocr_root):
+    (root / 'ocr-key').write_text(key)
+    os.chmod(root / 'ocr-key', 0o600)
+(ocr_root / 'config.toml').write_text(
     (ROOT / 'src/backend_ocr/config.toml').read_text().replace('idle_timeout_seconds = 300', 'idle_timeout_seconds = 2')
 )
 compose = ['docker', 'compose', '-p', PROJECT, '-f', str(ROOT / 'docker/docker-compose.yaml')]
@@ -341,13 +349,39 @@ def rss_bytes():
     return int(next(line.split()[1] for line in status.splitlines() if line.startswith('VmRSS:'))) * 1024
 
 
+def assert_service_identity(service):
+    status = command(compose + ['exec', '-T', service, 'cat', '/proc/1/status']).decode()
+    for label, expected in [('Uid:', os.getuid()), ('Gid:', os.getgid())]:
+        values = next(line.split()[1:] for line in status.splitlines() if line.startswith(label))
+        assert values == [str(expected)] * 4
+
+
 try:
+    resolved = json.loads(command(compose + ['config', '--format', 'json']))
+    for service, source, read_only in [('backend_api', api_root, False), ('backend_ocr', ocr_root, True)]:
+        mounts = resolved['services'][service]['volumes']
+        assert len(mounts) == 1
+        assert mounts[0]['source'] == str(source) and mounts[0]['target'] == '/data'
+        assert bool(mounts[0].get('read_only', False)) == read_only
     command(compose + ['up', '-d'])
+    for service in ['backend_api', 'backend_ocr']:
+        eventually(lambda: assert_service_identity(service), 30)
+    command(compose + ['exec', '-T', 'backend_ocr', 'test', '!', '-e', '/data/database.sqlite'])
     caddy = command(compose + ['ps', '-q', 'caddy']).decode().strip()
     ca = OUTPUT / 'local-test-ca.crt'
     eventually(lambda: command(['docker', 'cp', f'{caddy}:/data/caddy/pki/authorities/local/root.crt', str(ca)]), 60)
     context = ssl.create_default_context(cafile=ca)
     assert eventually(lambda: api('server/status'), 60)['capabilities']['review']
+    for path, content_type in [
+        ('/', 'text/html'),
+        ('/assets/app.mjs', 'text/javascript'),
+        ('/assets/app.css', 'text/css'),
+    ]:
+        with urllib.request.urlopen(f'https://localhost:{https_port}{path}', context=context, timeout=10) as response:
+            assert response.headers['Content-Type'].startswith(content_type)
+            assert response.headers['Cache-Control'] == 'no-store'
+            assert "connect-src 'self'" in response.headers['Content-Security-Policy']
+            assert response.read()
     assert eventually(ocr_health, 60)['engine_state'] == 'unloaded'
     password = secrets.token_urlsafe(24)
     command(
@@ -356,11 +390,11 @@ try:
             'exec',
             '-T',
             '--user',
-            '1000:1000',
+            f'{os.getuid()}:{os.getgid()}',
             'backend_api',
             '/app/helpyourself',
-            '--config',
-            '/config/config.toml',
+            '--data-dir',
+            '/data',
             'create-user',
             '--username',
             'synthetic',
@@ -406,6 +440,8 @@ try:
     report = archive['file']['file_id']
     raw_path = archive['file']['relative_path']
     assert download(f'files/{report}/download') == raw
+    assert (api_root / 'database.sqlite').stat().st_uid == os.getuid()
+    assert (api_root / raw_path).stat().st_uid == os.getuid()
     current = api('reports/get', {'report_id': report})
     recognized = None
     if options.ocr:
@@ -580,6 +616,56 @@ try:
             assert point['unit'] == 'mg/dL' and point['reference']['upper'] == '100'
         assert download(f'files/{scan_report}/download') == scanned
 
+    if options.webgui:
+        connection = api('health/connect', {'platform': 'apple_health', 'installation_id': str(uuid.uuid4())})
+        timestamp = int(time.time())
+        api(
+            'health/sync',
+            {
+                'connection_id': connection['connection_id'],
+                'batch_id': str(uuid.uuid4()),
+                'record_type': 'resting_heart_rate',
+                'coverage_status': 'observed',
+                'records': [
+                    {
+                        'record_id': 'browser-sample',
+                        'source_id': 'synthetic-watch',
+                        'record_type': 'resting_heart_rate',
+                        'start_at': timestamp,
+                        'end_at': timestamp,
+                        'version': 1,
+                        'deleted': False,
+                        'payload': {'value': 58, 'unit': 'count/min', 'metadata': {'synthetic': True}},
+                    }
+                ],
+            },
+        )
+        if not pdf_report:
+            pdf_payload = (
+                b'--check\r\nContent-Disposition: form-data; name="file"; filename="text.pdf"\r\nContent-Type: application/pdf\r\n\r\n'
+                + text_pdf()
+                + b'\r\n--check--\r\n'
+            )
+            pdf_report = api(
+                'files/upload',
+                payload=pdf_payload,
+                headers={'Content-Type': 'multipart/form-data; boundary=check', 'X-Upload-Id': str(uuid.uuid4())},
+            )['file']['file_id']
+        browser_env = dict(
+            environment,
+            WEBGUI_TEST_ORIGIN=f'https://localhost:{https_port}',
+            WEBGUI_TEST_USERNAME='synthetic',
+            WEBGUI_TEST_PASSWORD=password,
+            WEBGUI_TEST_REPORT=report,
+            WEBGUI_TEST_PDF=pdf_report,
+        )
+        subprocess.run(
+            ['node', str(ROOT / 'tests/frontend/e2e/browser.mjs'), str(options.webgui.resolve())],
+            cwd=ROOT,
+            env=browser_env,
+            check=True,
+        )
+
     load_result = health_load() if options.load else None
     export_id = api('exports/create')['export_id']
 
@@ -595,8 +681,10 @@ try:
         assert 'observation_revisions.jsonl' in archive.namelist()
         assert json.loads(archive.read('manifest.json'))['version'] == 3
         if options.load:
-            assert len(archive.read('health_revisions.jsonl').splitlines()) == 3
-            assert len([name for name in archive.namelist() if name.startswith('raw/apple_health/')]) == 3
+            assert len(archive.read('health_revisions.jsonl').splitlines()) == 3 + bool(options.webgui)
+            assert len([name for name in archive.namelist() if name.startswith('raw/apple_health/')]) == 3 + bool(
+                options.webgui
+            )
         if options.ocr:
             assert archive.read(pdf_upload['file']['relative_path']) == pdf
             assert b'2.586' in archive.read('extraction_inputs.jsonl')
@@ -622,8 +710,6 @@ try:
                 f'127.0.0.1:{restored_port}:8080',
                 '-v',
                 f'{snapshot}:/data',
-                '-v',
-                f'{environment["HELPYOURSELF_CONFIG"]}:/config/config.toml:ro',
                 'helpyourself-backend-api:local',
             ]
         )
@@ -664,6 +750,9 @@ try:
     api('user/delete', {'confirmation': 'synthetic'})
     result = {
         'https_with_trusted_test_ca': True,
+        'separate_data_roots_fixed_config_and_nonroot_identity': True,
+        'embedded_webgui_assets': True,
+        'webgui_browser_checks': bool(options.webgui),
         'login_upload_review_trend_original_export': True,
         'restart_persistence': True,
         'stopped_copy_restores_complete_archive': True,
@@ -684,5 +773,5 @@ finally:
     if snapshot.exists():
         shutil.rmtree(snapshot)
     command(compose + ['down', '-v'])
-    for name in ['HELPYOURSELF_CONFIG', 'HELPYOURSELF_OCR_KEY_FILE', 'HELPYOURSELF_OCR_CONFIG']:
-        Path(environment[name]).unlink(missing_ok=True)
+    for root in (api_root, ocr_root):
+        shutil.rmtree(root)

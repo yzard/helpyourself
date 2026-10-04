@@ -79,7 +79,7 @@ async fn archive_replay_download_and_cross_user_isolation() {
     }
     helpyourself::maintenance::cleanup(&state).await.unwrap();
     assert!(
-        std::fs::read_dir(state.config.server.data_dir.join("tmp"))
+        std::fs::read_dir(state.config.data_dir.join("tmp"))
             .unwrap()
             .next()
             .is_none()
@@ -149,7 +149,7 @@ async fn invalid_upload_does_not_create_records_or_leave_temporary_files() {
     );
     helpyourself::maintenance::cleanup(&state).await.unwrap();
     assert!(
-        std::fs::read_dir(state.config.server.data_dir.join("tmp"))
+        std::fs::read_dir(state.config.data_dir.join("tmp"))
             .unwrap()
             .next()
             .is_none()
@@ -255,8 +255,7 @@ async fn archived_files_and_sessions_survive_server_restart() {
     state.database.close().await;
     drop(router);
     drop(state);
-    let configuration =
-        helpyourself::config::Config::load(&directory.path().join("config.toml")).unwrap();
+    let configuration = helpyourself::config::Config::load(directory.path()).unwrap();
     let reopened = helpyourself::app::AppState::open(configuration)
         .await
         .unwrap();

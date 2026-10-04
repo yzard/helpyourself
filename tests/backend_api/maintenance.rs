@@ -20,7 +20,6 @@ async fn export_contains_raw_and_revisions_without_credentials_and_delete_cleans
         .unwrap();
     let path = state
         .config
-        .server
         .data_dir
         .join("exports")
         .join(&user.user_id)
@@ -52,7 +51,6 @@ async fn export_contains_raw_and_revisions_without_credentials_and_delete_cleans
     assert!(
         !state
             .config
-            .server
             .data_dir
             .join("raw/photos")
             .join(&user.user_id)
@@ -96,7 +94,6 @@ async fn account_deletion_revokes_sessions_and_cancels_queued_work() {
     assert!(
         !state
             .config
-            .server
             .data_dir
             .join("raw/photos")
             .join(&user.user_id)
@@ -132,7 +129,6 @@ async fn delayed_report_cleanup_does_not_remove_a_new_export() {
     assert!(
         state
             .config
-            .server
             .data_dir
             .join("exports")
             .join(&user.user_id)

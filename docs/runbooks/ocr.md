@@ -16,9 +16,9 @@ backend_api 接收手机照片/PDF，保存原件并逐页调用 backend_ocr。b
 
 ## 配置与运行
 
-两个服务分别用 `--config PATH` 加载 TOML；相对路径以配置文件目录解析。API `[ocr]` 指定 URL、独立密钥文件和 660 秒请求超时。OCR `[server]` 指定监听、同一密钥文件、600 秒整体推理截止时间和限额，`[engine]` 指定引擎及模型文件、生成参数。配置变更重启生效。手机用户 token 不传入 OCR。
+两个服务分别要求 `--data-dir ABSOLUTE_DIRECTORY`，只加载其根内固定的 `config.toml`；TOML 不包含 data_dir。相对密钥/模型路径以该根解析。API `[ocr]` 指定 URL、独立密钥文件和 660 秒请求超时。OCR `[server]` 指定监听、同一密钥文件、600 秒整体推理截止时间和限额，`[engine]` 指定引擎及模型文件、生成参数。配置变更重启生效。手机用户 token 不传入 OCR。
 
-`./run_playground.sh` 构建两个镜像，以前台运行 API、OCR 和 Caddy。仅在缺失时生成 `playground/secrets/ocr-key`（0600）及 `playground/backend_ocr.toml`；密钥不提交 Git，不覆盖已有配置。独立 Compose 默认 OCR 配置是 `src/backend_ocr/config.toml`，可用 `HELPYOURSELF_OCR_CONFIG` 指向自己的配置，`HELPYOURSELF_OCR_KEY_FILE` 指定只读密钥。
+`./run_playground.sh` 构建两个镜像，以前台运行 API、OCR 和 Caddy。仅在缺失时生成 playground/backend_api 与 playground/backend_ocr 内的 config.toml 和 ocr-key（0600），已有配置与稳定密钥不覆盖。API 根读写挂载，OCR 根只读挂载，OCR 无法读取 API SQLite 或原件。独立部署用 HELPYOURSELF_API_DATA_DIR 和 HELPYOURSELF_OCR_DATA_DIR 选择两个根目录。
 
 Compose 的 OCR 只加入 internal inference 网络，没有宿主机端口。8000 是服务入口，NInfer 仅监听容器回环 8002；不直接暴露原生 chat 接口。API 通过 Caddy HTTPS 为手机提供服务，OCR 不通过 Caddy。服务使用 PUID/PGID 降权运行，默认为 1000:1000。
 
@@ -51,4 +51,4 @@ src/backend_ocr/.venv/bin/python -m unittest discover -s tests/backend_ocr -p '*
 src/backend_ocr/.venv/bin/python tests/docker/deployment.py --ocr --load
 ```
 
-Docker 构建关口运行 Rust fmt/Clippy/71 项测试、Python isort/Black/10 项 OCR 测试及 8 项开发脚本测试。最后一个命令以隔离配置、随机端口、容器和临时卷完成真实 GPU 合成图片、文字 PDF、两页扫描/混合 PDF 的多单位识别及 HTTPS 数据闭环；--load 同时核验 Health 大载荷准入、原始重放、超限及响应性，结束清理自己的资源。未提供任何真实健康报告输入，不能据此标记临床准确性或 iPhone 真机验收完成。
+Docker 构建关口运行 Rust fmt/Clippy/73 项测试、Python isort/Black/10 项 OCR 测试、10 项开发脚本测试及 11 项前端测试。最后一个命令以隔离配置、随机端口、容器和临时卷完成真实 GPU 合成图片、文字 PDF、两页扫描/混合 PDF 的多单位识别及 HTTPS 数据闭环；--load 同时核验 Health 大载荷准入、原始重放、超限及响应性，结束清理自己的资源。未提供任何真实健康报告输入，不能据此标记临床准确性或 iPhone 真机验收完成。

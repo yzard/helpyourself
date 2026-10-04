@@ -28,7 +28,7 @@ async fn database_enforces_resource_owner_and_only_persists_session_digest() {
         .unwrap();
     let mut connection = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
-            .filename(state.config.server.data_dir.join("database.sqlite"))
+            .filename(state.config.data_dir.join("database.sqlite"))
             .foreign_keys(true),
     )
     .await

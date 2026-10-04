@@ -269,7 +269,6 @@ async fn download_export(
     let file = tokio::fs::File::open(
         state
             .config
-            .server
             .data_dir
             .join("exports")
             .join(&current.user.user_id)
@@ -428,7 +427,7 @@ async fn download_raw_health(
         .database
         .health_raw_path(&current.user.user_id, &raw_id)
         .await?;
-    let file = tokio::fs::File::open(state.config.server.data_dir.join(relative)).await?;
+    let file = tokio::fs::File::open(state.config.data_dir.join(relative)).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/json"),
@@ -554,7 +553,7 @@ async fn download(
     Path(file_id): Path<String>,
 ) -> Result<Response, AppError> {
     let file = state.database.file(&current.user.user_id, &file_id).await?;
-    let path = state.config.server.data_dir.join(&file.relative_path);
+    let path = state.config.data_dir.join(&file.relative_path);
     let reader = tokio::fs::File::open(path).await?;
     let body = Body::from_stream(tokio_util::io::ReaderStream::new(reader));
     Ok((

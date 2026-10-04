@@ -55,7 +55,7 @@ async fn streaming_digest_matches_existing_canonical_bytes_and_invalid_late_reco
         .await
         .unwrap();
     let mut connection_sql = SqliteConnection::connect_with(
-        &SqliteConnectOptions::new().filename(state.config.server.data_dir.join("database.sqlite")),
+        &SqliteConnectOptions::new().filename(state.config.data_dir.join("database.sqlite")),
     )
     .await
     .unwrap();

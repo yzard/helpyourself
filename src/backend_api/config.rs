@@ -10,6 +10,8 @@ pub const TEMPLATE: &str = include_str!("config.toml");
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(skip)]
+    pub data_dir: PathBuf,
     pub server: ServerConfig,
     pub security: SecurityConfig,
     pub storage: StorageConfig,
@@ -22,7 +24,6 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct ServerConfig {
     pub listen: SocketAddr,
-    pub data_dir: PathBuf,
 }
 
 #[derive(Clone, Deserialize)]
@@ -77,27 +78,31 @@ pub struct ProviderConfig {
 }
 
 impl Config {
-    pub fn load(path: &Path) -> Result<Self, AppError> {
-        let path = path.canonicalize()?;
-        let content = std::fs::read_to_string(&path)?;
+    pub fn load(data_dir: &Path) -> Result<Self, AppError> {
+        if !data_dir.is_absolute() {
+            return Err(AppError::Invalid(
+                "--data-dir must be an absolute directory",
+            ));
+        }
+        let directory = data_dir.canonicalize()?;
+        let content = std::fs::read_to_string(directory.join("config.toml"))?;
         let mut configuration: Self = toml::from_str(&content).map_err(|_| {
             AppError::Invalid("Invalid TOML configuration; check schema and field types")
         })?;
-        let directory = path
-            .parent()
-            .ok_or(AppError::Invalid("Invalid configuration path"))?;
-        configuration.server.data_dir = resolve_path(directory, &configuration.server.data_dir)?;
-        configuration.ocr.api_key_file = resolve_path(directory, &configuration.ocr.api_key_file)?;
+        configuration.data_dir = directory.clone();
+        configuration.ocr.api_key_file = resolve_path(&directory, &configuration.ocr.api_key_file)?;
         if let Some(path) = &configuration.providers.analysis.api_key_file {
-            configuration.providers.analysis.api_key_file = Some(resolve_path(directory, path)?);
+            configuration.providers.analysis.api_key_file = Some(resolve_path(&directory, path)?);
         }
         configuration.validate()?;
         Ok(configuration)
     }
 
     pub fn validate(&self) -> Result<(), AppError> {
-        if self.server.data_dir.as_os_str().is_empty() {
-            return Err(AppError::Invalid("server.data_dir must not be empty"));
+        if !self.data_dir.is_absolute() {
+            return Err(AppError::Invalid(
+                "--data-dir must be an absolute directory",
+            ));
         }
         if !(60..=31_536_000).contains(&self.security.session_ttl_seconds)
             || !(1..=86_400).contains(&self.security.login_window_seconds)

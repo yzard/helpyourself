@@ -47,4 +47,4 @@ RUN chmod 755 /app/entrypoint.sh
 ENV PATH=/opt/app/bin:$PATH PUID=1000 PGID=1000 UMASK=077 TZ=UTC PYTHONUNBUFFERED=1
 EXPOSE 8000
 ENTRYPOINT ["/app/entrypoint.sh", "python3", "-m", "backend_ocr.main"]
-CMD ["--config", "/config/config.toml"]
+CMD ["--data-dir", "/data"]

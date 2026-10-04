@@ -13,17 +13,15 @@ use std::{
 #[derive(Parser)]
 #[command(version, about = "Self-hosted health archive")]
 pub struct Cli {
-    #[arg(short, long, global = true)]
-    pub config: Option<PathBuf>,
+    #[arg(long)]
+    pub data_dir: PathBuf,
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand)]
 pub enum Command {
-    InitConfig {
-        path: PathBuf,
-    },
+    InitConfig,
     Serve,
     CreateUser {
         #[arg(long)]
@@ -45,11 +43,17 @@ pub enum Command {
     ProbeProviders,
 }
 
-pub fn write_template(path: &std::path::Path) -> Result<(), AppError> {
+pub fn write_template(data_dir: &std::path::Path) -> Result<(), AppError> {
+    if !data_dir.is_absolute() {
+        return Err(AppError::Invalid(
+            "--data-dir must be an absolute directory",
+        ));
+    }
+    std::fs::create_dir_all(data_dir)?;
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(path)?;
+        .open(data_dir.join("config.toml"))?;
     file.write_all(TEMPLATE.as_bytes())?;
     file.sync_all()?;
     Ok(())
@@ -71,13 +75,10 @@ fn read_password(password_stdin: bool) -> Result<String, AppError> {
 }
 
 pub async fn run(cli: Cli) -> Result<(), AppError> {
-    if let Command::InitConfig { path } = &cli.command {
-        return write_template(path);
+    if matches!(&cli.command, Command::InitConfig) {
+        return write_template(&cli.data_dir);
     }
-    let path = cli
-        .config
-        .ok_or(AppError::Invalid("--config PATH is required"))?;
-    let config = Config::load(&path)?;
+    let config = Config::load(&cli.data_dir)?;
     if matches!(cli.command, Command::CheckConfig) {
         println!("Configuration valid");
         return Ok(());
@@ -116,7 +117,7 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
         outcome?;
         return Ok(());
     }
-    let database = Database::open(&config.server.data_dir).await?;
+    let database = Database::open(&config.data_dir).await?;
     let reset_password = matches!(&cli.command, Command::ResetPassword { .. });
     match cli.command {
         Command::CreateUser {

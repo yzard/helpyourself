@@ -7,6 +7,8 @@ __pycache__/
 /playground/upload/
 /playground/output/
 /playground/secrets/
+/playground/backend_api/
+/playground/backend_ocr/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

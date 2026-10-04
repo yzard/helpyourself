@@ -11,8 +11,8 @@ from .config import load_config
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
     parser = argparse.ArgumentParser(description='Private Qwen3.8/NInfer health document service')
-    parser.add_argument('--config', type=Path, required=True)
-    config = load_config(parser.parse_args().config)
+    parser.add_argument('--data-dir', type=Path, required=True)
+    config = load_config(parser.parse_args().data_dir)
     if not config.engine.path.is_file():
         parser.error('Configured NInfer model artifact is missing')
     uvicorn.run(

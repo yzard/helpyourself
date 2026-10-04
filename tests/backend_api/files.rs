@@ -94,7 +94,6 @@ async fn heic_original_is_preserved_and_jpeg_is_only_a_processing_copy() {
         std::fs::read(
             state
                 .config
-                .server
                 .data_dir
                 .join(file["relative_path"].as_str().unwrap())
         )
@@ -105,7 +104,6 @@ async fn heic_original_is_preserved_and_jpeg_is_only_a_processing_copy() {
         std::fs::read(
             state
                 .config
-                .server
                 .data_dir
                 .join(file["processing_path"].as_str().unwrap())
         )
@@ -127,7 +125,6 @@ async fn heic_original_is_preserved_and_jpeg_is_only_a_processing_copy() {
     assert!(
         !state
             .config
-            .server
             .data_dir
             .join(file["relative_path"].as_str().unwrap())
             .exists()
@@ -135,7 +132,6 @@ async fn heic_original_is_preserved_and_jpeg_is_only_a_processing_copy() {
     assert!(
         !state
             .config
-            .server
             .data_dir
             .join(file["processing_path"].as_str().unwrap())
             .exists()

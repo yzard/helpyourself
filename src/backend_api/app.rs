@@ -19,8 +19,8 @@ pub struct AppState {
 impl AppState {
     pub async fn open(config: Config) -> Result<Self, AppError> {
         config.validate()?;
-        tokio::fs::create_dir_all(&config.server.data_dir).await?;
-        let lock_path = config.server.data_dir.join("server.lock");
+        tokio::fs::create_dir_all(&config.data_dir).await?;
+        let lock_path = config.data_dir.join("server.lock");
         let service_lock = tokio::task::spawn_blocking(move || {
             let lock = std::fs::OpenOptions::new()
                 .read(true)
@@ -34,7 +34,7 @@ impl AppState {
         })
         .await
         .map_err(|_| AppError::Internal)??;
-        let database = Database::open(&config.server.data_dir).await?;
+        let database = Database::open(&config.data_dir).await?;
         sqlx::query(crate::database::queries::RECOVER_ANALYSIS)
             .execute(&database.pool)
             .await?;
@@ -42,10 +42,10 @@ impl AppState {
             .execute(&database.pool)
             .await?;
         for folder in ["raw", "derived", "tmp"] {
-            tokio::fs::create_dir_all(config.server.data_dir.join(folder)).await?;
+            tokio::fs::create_dir_all(config.data_dir.join(folder)).await?;
         }
         database.temporary_files.recover().await?;
-        crate::raw::remove_orphans(&database, &config.server.data_dir).await?;
+        crate::raw::remove_orphans(&database, &config.data_dir).await?;
         let dummy_password_hash =
             authentication::hash_password(uuid::Uuid::new_v4().to_string()).await?;
         Ok(Self {
@@ -72,6 +72,7 @@ impl AppState {
 pub fn create_application(state: AppState) -> Router {
     let upload_limit = state.config.storage.maximum_upload_bytes * 2 + 65_536;
     routes::router(upload_limit)
+        .merge(crate::webgui::router())
         .layer(DefaultBodyLimit::max(16_384))
         .layer(middleware::from_fn(crate::middleware::request_logging))
         .with_state(state)

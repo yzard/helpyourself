@@ -35,7 +35,7 @@ SQLite 提供在线备份机制；本项目首版选择停止写入后复制目�
 
 ## momento 参考范围
 
-已只读查看本机 `/home/zyin/dev/momento` 的配置加载约定。可复用的是分节 TOML、显式配置路径、强类型校验、data_dir。其模型运行配置不等于通用 provider 地址配置，不照搬模型路径和镜像管理。
+已只读查看本机 `/home/zyin/dev/momento` 的配置加载约定。可复用的是分节 TOML 与强类型校验。2026-10-03 按用户要求采用服务独立根：--data-dir 指定绝对目录，只读根内固定 config.toml，TOML 不声明 data_dir。其模型运行配置不等于通用 provider 地址配置，不照搬模型路径和镜像管理。
 
 本计划未复制 momento 的密钥或真实运行配置；不引入两个项目的代码依赖。helpyourself 的相对路径按配置文件目录解析，是本次独立设计。
 

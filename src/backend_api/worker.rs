@@ -120,13 +120,11 @@ async fn extract(state: &AppState, job: &ClaimedJob) -> Result<(), AppError> {
     let file = state.database.file(&job.user_id, &job.file_id).await?;
     let source = state
         .config
-        .server
         .data_dir
         .join(file.processing_path.as_ref().unwrap_or(&file.relative_path));
     let scratch = state.database.temporary_files.reserve(
         state
             .config
-            .server
             .data_dir
             .join("tmp")
             .join(&job.user_id)

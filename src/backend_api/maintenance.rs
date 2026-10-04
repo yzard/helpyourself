@@ -191,7 +191,7 @@ pub async fn cleanup(state: &AppState) -> Result<(), AppError> {
         {
             return Err(AppError::Internal);
         }
-        let absolute = state.config.server.data_dir.join(path);
+        let absolute = state.config.data_dir.join(path);
         match tokio::fs::symlink_metadata(&absolute).await {
             Ok(metadata) if metadata.is_dir() => tokio::fs::remove_dir_all(&absolute).await?,
             Ok(_) => tokio::fs::remove_file(&absolute).await?,
@@ -236,7 +236,6 @@ async fn build_export(state: &AppState, user_id: &str, export_id: &str) -> Resul
     let scratch = state.database.temporary_files.reserve(
         state
             .config
-            .server
             .data_dir
             .join("tmp")
             .join(user_id)
@@ -292,7 +291,7 @@ async fn build_export(state: &AppState, user_id: &str, export_id: &str) -> Resul
     .await?;
     let archive_lease = scratch.clone();
     let archive_guard = guard.clone();
-    let raw = state.config.server.data_dir.clone();
+    let raw = state.config.data_dir.clone();
     state
         .database
         .cpu
@@ -314,7 +313,7 @@ async fn build_export(state: &AppState, user_id: &str, export_id: &str) -> Resul
     if current != Some(revision) || status.as_deref() != Some("running") {
         return Err(AppError::Conflict("Archive changed while exporting"));
     }
-    let target = state.config.server.data_dir.join("exports").join(user_id);
+    let target = state.config.data_dir.join("exports").join(user_id);
     tokio::fs::create_dir_all(&target).await?;
     tokio::fs::rename(
         scratch.path().join("archive.zip"),

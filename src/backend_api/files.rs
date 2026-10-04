@@ -33,7 +33,6 @@ pub async fn receive_upload(
     let pending = state.database.temporary_files.reserve(
         state
             .config
-            .server
             .data_dir
             .join("tmp")
             .join(uuid::Uuid::new_v4().to_string()),
@@ -71,7 +70,6 @@ pub async fn receive_upload(
     let original_pending = state.database.temporary_files.reserve(
         state
             .config
-            .server
             .data_dir
             .join("tmp")
             .join(uuid::Uuid::new_v4().to_string()),
@@ -184,11 +182,11 @@ pub async fn receive_upload(
         page_count,
         created_at: now()?,
     };
-    let final_path = state.config.server.data_dir.join(&file.relative_path);
+    let final_path = state.config.data_dir.join(&file.relative_path);
     let directory = final_path.parent().ok_or(AppError::Internal)?;
     tokio::fs::create_dir_all(directory).await?;
     if let Some(processing_path) = &file.processing_path {
-        let processing = state.config.server.data_dir.join(processing_path);
+        let processing = state.config.data_dir.join(processing_path);
         let directory = processing.parent().ok_or(AppError::Internal)?;
         tokio::fs::create_dir_all(directory).await?;
         tokio::fs::rename(pending.path(), &processing).await?;
@@ -206,7 +204,7 @@ pub async fn receive_upload(
         Err(error) => {
             tokio::fs::remove_file(&final_path).await?;
             if let Some(path) = &file.processing_path {
-                tokio::fs::remove_file(state.config.server.data_dir.join(path)).await?;
+                tokio::fs::remove_file(state.config.data_dir.join(path)).await?;
             }
             return Err(error);
         }

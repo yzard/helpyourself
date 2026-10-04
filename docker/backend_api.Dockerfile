@@ -4,6 +4,7 @@ RUN rustup component add rustfmt clippy
 RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace/src/backend_api
+COPY src/frontend/ /workspace/src/frontend/
 COPY src/backend_api/ /workspace/src/backend_api/
 COPY tests/backend_api/ /workspace/tests/backend_api/
 # BuildKit keeps dependency compilation and registry downloads across source edits.
@@ -27,4 +28,4 @@ RUN chmod 755 /app/entrypoint.sh
 ENV PUID=1000 PGID=1000 UMASK=077 TZ=UTC
 EXPOSE 8080
 ENTRYPOINT ["/app/entrypoint.sh", "/app/helpyourself"]
-CMD ["--config", "/config/config.toml", "serve"]
+CMD ["--data-dir", "/data", "serve"]

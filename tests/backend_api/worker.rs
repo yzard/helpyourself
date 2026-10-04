@@ -262,7 +262,7 @@ async fn long_extraction_renews_lease_and_releases_renewal_on_completion() {
         .unwrap();
     let mut connection = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
-            .filename(state.config.server.data_dir.join("database.sqlite"))
+            .filename(state.config.data_dir.join("database.sqlite"))
             .busy_timeout(Duration::from_secs(5)),
     )
     .await
