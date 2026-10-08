@@ -264,6 +264,7 @@ def scanned_and_mixed_pdf():
 
 def health_load():
     connection = api('health/connect', {'platform': 'apple_health', 'installation_id': str(uuid.uuid4())})
+    existing_raw_ids = {item['raw_id'] for item in api('health/raw/list', {'limit': 100})['files']}
 
     def record(identifier, character, payload_bytes):
         payload = {'blob': '', 'synthetic': True, 'printed_unit': 'mg/dL'}
@@ -322,7 +323,9 @@ def health_load():
     assert latencies and max(latencies) < 1000, latencies
     # Lost response retry must retain the same digest and create no duplicate originals.
     assert api('health/sync', payload=bodies[0])['replayed'] is True
-    originals = api('health/raw/list', {'limit': 100})['files']
+    all_originals = api('health/raw/list', {'limit': 100})['files']
+    originals = [item for item in all_originals if item['raw_id'] not in existing_raw_ids]
+    assert {item['raw_id'] for item in all_originals} >= existing_raw_ids
     assert len(originals) == 3
     expected = {row['record_id']: row for input_batch in [first, second] for row in input_batch['records']}
     for original in originals:
@@ -334,7 +337,7 @@ def health_load():
             raise AssertionError('Oversize Health request was accepted')
         except urllib.error.HTTPError as error:
             assert error.code == 413
-    assert len(api('health/raw/list', {'limit': 100})['files']) == 3
+    assert {item['raw_id'] for item in api('health/raw/list', {'limit': 100})['files']} == {item['raw_id'] for item in all_originals}
     summary = {
         'synthetic_only': True,
         'concurrent_requests': 2,
@@ -660,6 +663,17 @@ try:
                 ],
             },
         )
+        for kind, records in [
+            ('sleep', [dict(record_id='browser-sleep', source_id='synthetic-watch', record_type='sleep',
+                            start_at=timestamp - 7200, end_at=timestamp - 3600, version=1, deleted=False,
+                            payload=dict(category=1, metadata=dict(synthetic=True)))]),
+            ('heart_rate', [dict(record_id=f'browser-heart-{index}', source_id='synthetic-watch', record_type='heart_rate',
+                                 start_at=timestamp - 120 + index * 10, end_at=timestamp - 120 + index * 10,
+                                 version=1, deleted=False, payload=dict(value=100 + index * 10, unit='count/min'))
+                            for index in range(7)]),
+        ]:
+            api('health/sync', dict(connection_id=connection['connection_id'], batch_id=str(uuid.uuid4()),
+                                    record_type=kind, coverage_status='observed', records=records))
         if not pdf_report:
             pdf_payload = (
                 b'--check\r\nContent-Disposition: form-data; name="file"; filename="text.pdf"\r\nContent-Type: application/pdf\r\n\r\n'
@@ -699,16 +713,16 @@ try:
         assert archive.read(raw_path) == raw
         assert 'sessions.jsonl' not in archive.namelist()
         assert 'observation_revisions.jsonl' in archive.namelist()
-        assert json.loads(archive.read('manifest.json'))['version'] == 3
+        assert json.loads(archive.read('manifest.json'))['version'] == 1
         if options.load:
-            assert len(archive.read('health_revisions.jsonl').splitlines()) == 3 + bool(options.webgui)
-            assert len([name for name in archive.namelist() if name.startswith('raw/apple_health/')]) == 3 + bool(
+            assert sum(json.loads(line)['platform'] == 'apple_health' for line in archive.read('health_revisions.jsonl').splitlines()) == 3 + 9 * bool(options.webgui)
+            assert len([name for name in archive.namelist() if name.startswith('raw/apple_health/')]) == 3 + 9 * bool(
                 options.webgui
             )
         if options.ocr:
             assert archive.read(pdf_upload['file']['relative_path']) == pdf
             assert b'2.586' in archive.read('extraction_inputs.jsonl')
-            assert b'lab-units-v2' in archive.read('observations.csv')
+            assert b'lab-units-v3' in archive.read('observations.csv')
             assert archive.read(scan_upload['file']['relative_path']) == scanned
     command(compose + ['restart', 'backend_api'])
     assert eventually(lambda: api('reports/get', {'report_id': report}), 60)['observations'][0]['status'] == 'confirmed'

@@ -195,3 +195,5 @@ pub async fn upload(
             .unwrap_or_else(|_| json!({"text":String::from_utf8_lossy(&bytes)})),
     )
 }
+
+mod wellness;

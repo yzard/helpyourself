@@ -1,0 +1,95 @@
+{
+  "seed": 20261007,
+  "protocol": "90 calendar days, Bartlett HAC lag 7, n/(n-p), t(n-p), intercept + predictor + trend + weekday",
+  "purpose": "Describe finite-sample limitations. This is not a power study or clinical validation.",
+  "scenarios": [
+    {
+      "ar1": 0.0,
+      "missing_fraction": 0.0,
+      "trials": 1000,
+      "null_rejections": 80,
+      "nominal_005_rejection_rate": 0.08,
+      "wilson_95": [
+        0.06474803809836388,
+        0.09846643902950242
+      ]
+    },
+    {
+      "ar1": 0.0,
+      "missing_fraction": 0.2,
+      "trials": 1000,
+      "null_rejections": 84,
+      "nominal_005_rejection_rate": 0.084,
+      "wilson_95": [
+        0.06835881367776428,
+        0.10282504938221759
+      ]
+    },
+    {
+      "ar1": 0.3,
+      "missing_fraction": 0.0,
+      "trials": 1000,
+      "null_rejections": 78,
+      "nominal_005_rejection_rate": 0.078,
+      "wilson_95": [
+        0.06294716759073615,
+        0.09628261657107237
+      ]
+    },
+    {
+      "ar1": 0.3,
+      "missing_fraction": 0.2,
+      "trials": 1000,
+      "null_rejections": 91,
+      "nominal_005_rejection_rate": 0.091,
+      "wilson_95": [
+        0.07470470437164412,
+        0.11042558406953998
+      ]
+    },
+    {
+      "ar1": 0.6,
+      "missing_fraction": 0.0,
+      "trials": 1000,
+      "null_rejections": 118,
+      "nominal_005_rejection_rate": 0.118,
+      "wilson_95": [
+        0.09945155840122326,
+        0.13947208508174083
+      ]
+    },
+    {
+      "ar1": 0.6,
+      "missing_fraction": 0.2,
+      "trials": 1000,
+      "null_rejections": 125,
+      "nominal_005_rejection_rate": 0.125,
+      "wilson_95": [
+        0.10592623063520472,
+        0.14694383822896162
+      ]
+    },
+    {
+      "ar1": 0.9,
+      "missing_fraction": 0.0,
+      "trials": 1000,
+      "null_rejections": 234,
+      "nominal_005_rejection_rate": 0.234,
+      "wilson_95": [
+        0.20880800256185078,
+        0.2612278329524646
+      ]
+    },
+    {
+      "ar1": 0.9,
+      "missing_fraction": 0.2,
+      "trials": 1000,
+      "null_rejections": 235,
+      "nominal_005_rejection_rate": 0.235,
+      "wilson_95": [
+        0.2097655884262536,
+        0.2622625935710906
+      ]
+    }
+  ]
+}

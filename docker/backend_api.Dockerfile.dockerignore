@@ -10,3 +10,8 @@
 !tests/
 !tests/backend_api/
 !tests/backend_api/**
+
+!src/archive/
+!src/archive/**
+**/target/
+**/__pycache__/

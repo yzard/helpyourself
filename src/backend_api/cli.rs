@@ -35,6 +35,12 @@ pub enum Command {
         #[arg(long)]
         password_stdin: bool,
     },
+    EnableUser {
+        #[arg(long)]
+        username: String,
+        #[arg(long)]
+        password_stdin: bool,
+    },
     DisableUser {
         #[arg(long)]
         username: String,
@@ -141,6 +147,15 @@ pub async fn run(cli: Cli) -> Result<(), AppError> {
                     .await?;
                 println!("User created");
             }
+        }
+        Command::EnableUser {
+            username,
+            password_stdin,
+        } => {
+            let username = normalize_username(&username)?;
+            let password_hash = hash_password(read_password(password_stdin)?).await?;
+            database.enable_user(&username, &password_hash).await?;
+            println!("User enabled with a new password; sessions revoked");
         }
         Command::DisableUser { username } => {
             database

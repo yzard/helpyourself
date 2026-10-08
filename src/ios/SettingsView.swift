@@ -37,13 +37,13 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { confirmation = "" }
                 Button("Delete", role: .destructive) { Task { await model.perform {
                     guard let client = model.client else { return }
-                    _ = try await client.post("user/delete", body: .object(["confirmation": .string(confirmation)]))
+                    _ = try await model.request("user/delete", body: .object(["confirmation": .string(confirmation)]))
                     try model.clearLocalSession()
                 }; confirmation = "" } }
             } message: { Text("Type \(model.session?.username ?? "") to delete all server records and revoke every session. Stored files are then removed by the server. Your separate backups remain your responsibility.") }
     }
-    private func reload() async { do { if let client = model.client { exports = try await client.post("exports/list", body: .object([:]))["exports"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
-    private func action(_ path: String, body: JSONValue) async { await model.perform { if let client = model.client { _ = try await client.post(path, body: body) } } }
+    private func reload() async { do { if let client = model.client { exports = try await model.request("exports/list", body: .object([:]))["exports"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
+    private func action(_ path: String, body: JSONValue) async { await model.perform { if let client = model.client { _ = try await model.request(path, body: body) } } }
     private func download(_ id: String) async { await model.perform {
         guard let client = model.client, let archive = model.archive else { return }
         let url = try archive.location("export-\(id).zip")

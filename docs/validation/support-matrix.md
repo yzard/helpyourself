@@ -24,7 +24,7 @@
 | Health Connect | 服务器 envelope、来源、修订、删除、原件目录 raw/google_health | 合成归档/导出/删除测试通过；没有 Android App，未来客户端待实现 |
 | Excel、WHOOP/Function 账户直连、其他写回映射 | 无当前实现 | 后续范围 |
 
-完整原件路径和 SQLite 关系见 [架构](../architecture.md)；原件下载、完整回复及导出 v3 见 [API](../api.md)。所有原始载荷进入 API 主档案；“所有数据”的目标受 HealthKit 公开可读对象、OS、设备、权限和服务限额约束，不能声明已验证 Apple 内部数据库的完整镜像。
+完整原件路径和 SQLite 关系见 [架构](../architecture.md)；原件下载、完整回复及导出 v1 见 [API](../api.md)。所有原始载荷进入 API 主档案；“所有数据”的目标受 HealthKit 公开可读对象、OS、设备、权限和服务限额约束，不能声明已验证 Apple 内部数据库的完整镜像。
 
 健康记录身份是 user + platform + source_id + record_id；同版本不同内容报冲突。Apple 删除未知来源用通配墓碑，清除对应内容/历史/原件，防重扫复活。快照缺失、授权撤销或无可见样本不作为全量删除依据。
 

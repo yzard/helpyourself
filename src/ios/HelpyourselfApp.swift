@@ -22,13 +22,18 @@ struct RootView: View {
             if model.session == nil { LoginView(model: model) }
             else {
                 TabView {
-                    NavigationStack { ReportsView(model: model) }.tabItem { Label("Reports", systemImage: "doc.text") }
+                    NavigationStack { OverviewView(model: model) }.tabItem { Label("Overview", systemImage: "square.grid.2x2") }
+                    NavigationStack { ReportsView(model: model) }.tabItem { Label("Archive", systemImage: "doc.text") }
                     NavigationStack { TrendsView(model: model) }.tabItem { Label("Trends", systemImage: "chart.xyaxis.line") }
-                    NavigationStack { HealthView(model: model) }.tabItem { Label("Health", systemImage: "heart") }
                     NavigationStack { AnalysisView(model: model) }.tabItem { Label("Insights", systemImage: "sparkles") }
-                    NavigationStack { SettingsView(model: model) }.tabItem { Label("Settings", systemImage: "gearshape") }
+                    NavigationStack { DataCenterView(model: model) }.tabItem { Label("Data", systemImage: "externaldrive") }
                 }
                 .task { await model.sendDrafts(); await model.refresh(); await model.synchronizeHealth(requestAccess: false) }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let notice = model.offlineNotice, model.session != nil {
+                Label(notice, systemImage: "wifi.slash").font(.caption).padding(8).frame(maxWidth: .infinity).background(.regularMaterial)
             }
         }
         .overlay(alignment: .top) { if model.isBusy { ProgressView("Working…").padding(10).background(.regularMaterial, in: Capsule()).accessibilityLabel("Processing your request") } }

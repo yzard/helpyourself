@@ -38,9 +38,9 @@ struct HealthView: View {
         }.navigationTitle("Health").task(id: kind) { await reload() }.refreshable { await reload() }
     }
     private func reload() async { do { if let client = model.client {
-        coverage = try await client.post("health/coverage", body: .object([:]))["coverage"].arrayValue
+        coverage = try await model.request("health/coverage", body: .object([:]))["coverage"].arrayValue
         var scope = dateScope(days: 30); scope["record_type"] = .string(kind)
-        days = try await client.post("health/aggregate", body: scope)["days"].arrayValue
+        days = try await model.request("health/aggregate", body: scope)["days"].arrayValue
     } } catch { model.errorMessage = error.localizedDescription } }
 }
 

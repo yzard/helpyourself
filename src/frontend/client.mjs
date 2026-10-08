@@ -1,9 +1,9 @@
 const READ_ACTIONS = new Set([
-  'user/get', 'server/status', 'reports/list', 'reports/get', 'reports/input/get',
+  'wellness/hrv', 'user/get', 'server/status', 'reports/list', 'reports/get', 'reports/input/get',
   'reports/extraction/get', 'observations/history', 'metrics/list', 'trends/get',
-  'health/coverage', 'health/list', 'health/aggregate', 'analysis/list', 'analysis/get',
+  'wellness/associations/list', 'wellness/associations/get', 'wellness/review', 'wellness/timeline', 'wellness/sleep/regularity', 'wellness/series', 'wellness/preferences/get', 'wellness/import/list', 'wellness/clinical-age', 'wellness/sleep', 'wellness/entries/list', 'wellness/day', 'wellness/sources', 'exports/list', 'health/coverage', 'health/list', 'health/aggregate', 'analysis/list', 'analysis/get',
 ]);
-const ACTIONS = new Set([...READ_ACTIONS, 'session/login', 'session/logout', 'analysis/create', 'analysis/retry']);
+const ACTIONS = new Set([...READ_ACTIONS, 'wellness/associations/run', 'session/login', 'session/logout', 'analysis/create', 'analysis/retry', 'exports/create', 'exports/delete', 'wellness/preferences/save', 'wellness/import/delete', 'wellness/import/fit', 'wellness/import/tcx', 'wellness/import/gpx', 'wellness/entries/save', 'wellness/entries/delete']);
 
 export class APIError extends Error {
   constructor(message, status) {
@@ -37,6 +37,13 @@ export class Client {
       throw new Error('This original format cannot be previewed.');
     }
     return blob;
+  }
+  async exportArchive(id, signal) {
+    if (typeof id !== 'string' || !/^[a-zA-Z0-9-]+$/.test(id)) throw new Error('Invalid export identifier.');
+    const response = await this.request(`/api/v1/exports/${id}/download`, {
+      method: 'GET', headers: {}, signal,
+    }, false);
+    return response.blob();
   }
   async request(path, options, anonymous) {
     const session = this.session;

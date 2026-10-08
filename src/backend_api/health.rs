@@ -69,12 +69,32 @@ pub struct StoredHealthRecord {
 }
 
 impl Database {
+    pub async fn require_device_connection(
+        &self,
+        user: &str,
+        connection: &str,
+    ) -> Result<(), AppError> {
+        let platform: String = sqlx::query_scalar(queries::CONNECTION)
+            .bind(user)
+            .bind(connection)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        if !["apple_health", "health_connect"].contains(&platform.as_str()) {
+            return Err(AppError::Invalid(
+                "Use the domain endpoint for this connection",
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn create_connection(
         &self,
         user_id: &str,
         request: ConnectionRequest,
     ) -> Result<Connection, AppError> {
-        if !["apple_health", "health_connect"].contains(&request.platform.as_str())
+        if !["apple_health", "health_connect", "manual", "file_import"]
+            .contains(&request.platform.as_str())
             || uuid::Uuid::parse_str(&request.installation_id).is_err()
         {
             return Err(AppError::Invalid("Invalid platform or installation ID"));
@@ -141,6 +161,42 @@ impl Database {
         }
         let mut changed = false;
         for record in &request.records {
+            if platform == "manual" {
+                let previous = sqlx::query(queries::HEALTH_RECORD)
+                    .bind(user_id)
+                    .bind(&platform)
+                    .bind(&record.source_id)
+                    .bind(&record.record_id)
+                    .fetch_optional(&mut *transaction)
+                    .await?;
+                match previous {
+                    None if record.deleted => return Err(AppError::NotFound),
+                    None if record.version != 1 => {
+                        return Err(AppError::Conflict(
+                            "A new manual entry must start at version 1",
+                        ));
+                    }
+                    Some(previous) => {
+                        let version = previous.get::<i64, _>("version");
+                        if previous.get::<i64, _>("deleted") == 1
+                            || previous.get::<String, _>("record_type") != record.record_type
+                        {
+                            return Err(AppError::Conflict(
+                                "Entry was deleted or its type differs; refresh before editing",
+                            ));
+                        }
+                        let replay = !record.deleted
+                            && record.version == version
+                            && previous.get::<String, _>("payload_json") == record.payload_json;
+                        if !replay && version.checked_add(1) != Some(record.version) {
+                            return Err(AppError::Conflict(
+                                "Entry changed; refresh before editing",
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
             if !record.deleted {
                 let deleted: i64 = sqlx::query_scalar(queries::HEALTH_TOMBSTONE)
                     .bind(user_id)
@@ -411,22 +467,52 @@ impl Database {
         if end < start || (end - start).num_days() > 366 {
             return Err(AppError::Invalid("Select at most 367 days"));
         }
-        let exclusive = end.succ_opt().ok_or(AppError::Invalid("Date overflow"))?;
-        let start_at = day_boundary(timezone, start)?;
-        let end_at = day_boundary(timezone, exclusive)?;
-        let records = sqlx::query_as::<_, StoredHealthRecord>(queries::HEALTH_RANGE)
-            .bind(user_id)
-            .bind(&request.record_type)
-            .bind(start_at)
-            .bind(end_at)
-            .fetch_all(&self.pool)
-            .await?;
-        if records.len() > 50000 {
-            return Err(AppError::TooLarge);
+        let revision = self.data_revision(user_id).await?;
+        let mut cursor = start;
+        let mut days = Vec::new();
+        while cursor <= end {
+            let chunk_end = cursor
+                .checked_add_days(chrono::Days::new(6))
+                .unwrap_or(end)
+                .min(end);
+            let exclusive = chunk_end
+                .succ_opt()
+                .ok_or(AppError::Invalid("Date overflow"))?;
+            let records = sqlx::query_as::<_, StoredHealthRecord>(queries::HEALTH_RANGE)
+                .bind(user_id)
+                .bind(&request.record_type)
+                .bind(day_boundary(timezone, cursor)?)
+                .bind(day_boundary(timezone, exclusive)?)
+                .fetch_all(&self.pool)
+                .await?;
+            if records.len() > 50000 {
+                return Err(AppError::TooLarge);
+            }
+            let kind = request.record_type.clone();
+            let result = self
+                .cpu
+                .run(move || aggregate_records(records, &kind, cursor, chunk_end, timezone))
+                .await?;
+            days.extend(
+                result["days"]
+                    .as_array()
+                    .ok_or(AppError::Internal)?
+                    .iter()
+                    .cloned(),
+            );
+            if days.len() > 10000 {
+                return Err(AppError::TooLarge);
+            }
+            cursor = exclusive;
         }
-        self.cpu
-            .run(move || aggregate_records(records, &request.record_type, start, end, timezone))
-            .await
+        if revision != self.data_revision(user_id).await? {
+            return Err(AppError::Conflict(
+                "Archive changed; refresh daily aggregates",
+            ));
+        }
+        Ok(
+            json!({"days":days,"timezone":timezone.name(),"algorithm_version":ALGORITHM_VERSION,"source_policy":"separate_sources_no_cross_source_sum","computed_at":now()?,"data_revision":revision}),
+        )
     }
 }
 

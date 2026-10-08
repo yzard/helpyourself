@@ -13,6 +13,11 @@ fn analyte_specific_conversions_and_aliases_retain_printed_payload() {
         ("ferritin", "35", "µg/L", "35", "ng/mL"),
         ("hba1c", "42", "mmol/mol", "5.99416", "%"),
         ("glucose", "100", "MG / DL", "100", "mg/dL"),
+        ("albumin", "45", "g/L", "4.5", "g/dL"),
+        ("crp", "1", "mg/L", "0.1", "mg/dL"),
+        ("wbc", "5", "10^3/µL", "5", "10^9/L"),
+        ("mcv", "90", "fL", "90", "fL"),
+        ("alp", "60", "IU/L", "60", "U/L"),
     ] {
         let mut input = observation_payload();
         input.metric_id = Some(metric.into());

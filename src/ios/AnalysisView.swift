@@ -6,16 +6,26 @@ struct AnalysisView: View {
     var body: some View {
         List {
             Section {
+                NavigationLink("Archive questions", destination: ArchiveCoachView(model: model))
+                NavigationLink("Reminders", destination: RemindersView(model: model))
+                NavigationLink("Specialty records", destination: SpecialtyRecordsView(model: model))
+                NavigationLink("Nutrition", destination: NutritionDayView(model: model))
+                NavigationLink("Training planner", destination: TrainingPlannerView(model: model))
+                NavigationLink("HRV windows", destination: HRVWindowsView(model: model))
+                NavigationLink("Behavior associations", destination: BehaviorAssociationsView(model: model))
                 Text("Personal research preview").font(.headline)
                 Text("Lipid-related hypotheses are unverified. Review the referenced data and discuss questions with your clinician. New confirmed reports can also start a review when the server's analysis provider is enabled.")
                 Button("Review lipid history and recent health data") { Task { await model.perform {
                     guard let client = model.client else { return }
-                    _ = try await client.post("analysis/create", body: dateScope(days: 90))
+                    _ = try await model.request("analysis/create", body: dateScope(days: 90))
                 }; await reload() } }.disabled(model.isBusy || !model.capabilities["analysis"].boolValue)
             }
             Section("Reviews") {
                 ForEach(runs, id: \.identifier) { run in
-                    NavigationLink { AnalysisDetail(model: model, runID: run["run_id"].stringValue) } label: {
+                    NavigationLink {
+                        if run["prompt_version"] == .string("archive-coach-v1") { CoachAnswerView(model: model, runID: run["run_id"].stringValue) }
+                        else { AnalysisDetail(model: model, runID: run["run_id"].stringValue) }
+                    } label: {
                         VStack(alignment: .leading) {
                             Text(run["status"].stringValue.capitalized)
                             Text(Date(timeIntervalSince1970: run["created_at"].numberValue ?? 0), format: .dateTime).font(.caption)
@@ -25,7 +35,7 @@ struct AnalysisView: View {
             }
         }.navigationTitle("Analysis").task { await reload() }.refreshable { await reload() }
     }
-    private func reload() async { do { if let client = model.client { runs = try await client.post("analysis/list", body: .object([:]))["runs"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
+    private func reload() async { do { if let client = model.client { runs = try await model.request("analysis/list", body: .object([:]))["runs"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
 }
 
 private struct AnalysisDetail: View {
@@ -67,8 +77,8 @@ private struct AnalysisDetail: View {
         }.navigationTitle("Lipid review").task { await reload() }.refreshable { await reload() }
     }
     private func lines(_ title: String, _ values: JSONValue) -> some View { VStack(alignment: .leading, spacing: 5) { Text(title).font(.headline); ForEach(Array(values.arrayValue.enumerated()), id: \.offset) { _, value in Text(value.stringValue) } } }
-    private func reload() async { do { if let client = model.client { run = try await client.post("analysis/get", body: .object(["run_id": .string(runID)])) } } catch { model.errorMessage = error.localizedDescription } }
-    private func action(_ path: String, body: JSONValue) async { await model.perform { if let client = model.client { _ = try await client.post(path, body: body) } }; await reload() }
+    private func reload() async { do { if let client = model.client { run = try await model.request("analysis/get", body: .object(["run_id": .string(runID)])) } } catch { model.errorMessage = error.localizedDescription } }
+    private func action(_ path: String, body: JSONValue) async { await model.perform { if let client = model.client { _ = try await model.request(path, body: body) } }; await reload() }
 }
 
 private extension JSONValue { var selfDescription: String { self["source_id"].stringValue } }

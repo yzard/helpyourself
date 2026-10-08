@@ -1,0 +1,256 @@
+{
+  "version": 1,
+  "time_contract": "Unix seconds in UTC unless an embedded payload states another format. Clinical date-only fields do not imply midnight.",
+  "missing_contract": "Null means unknown or not applicable. It is never an implicit zero.",
+  "source_contract": "Health payloads retain provider fields. Unsupported fields are archival evidence, not validated measurements.",
+  "tables": {
+    "analysis_feedback": {
+      "meaning": "User comments linked to retained analysis runs.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "run_id": "Identifier of the extraction or analysis attempt. Separate attempts retain separate evidence.",
+        "feedback_id": "Identifier of user feedback for an analysis run.",
+        "note": "User-authored text. It is not a model instruction or a confirmed medical fact.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "analysis_runs": {
+      "meaning": "Constrained model runs with input snapshots, output and error states. Queued or running work does not resume during restoration.",
+      "fields": {
+        "run_id": "Identifier of the extraction or analysis attempt. Separate attempts retain separate evidence.",
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "status": "Stored workflow state. See the table-specific state description.",
+        "input_digest": "SHA-256 digest of the serialized input snapshot used for this analysis.",
+        "input_json": "Complete serialized input snapshot. Embedded dates retain their original precision and provenance.",
+        "output_json": "Serialized analysis response, or null when no response exists. It is not a confirmed observation.",
+        "error_code": "Machine-readable failure category, or null when no failure is recorded.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date.",
+        "model": "Provider-reported or configured model identifier for this attempt."
+      }
+    },
+    "deleted_uploads": {
+      "meaning": "Upload tombstones that prevent a deleted upload from returning through a retry.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "upload_id": "Client request identifier used to prevent duplicate uploads, scoped to the owner."
+      }
+    },
+    "extraction_inputs": {
+      "meaning": "Per-page input evidence for each extraction attempt.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "report_id": "Identifier of the report that owns this row.",
+        "run_id": "Identifier of the extraction or analysis attempt. Separate attempts retain separate evidence.",
+        "page_number": "One-based document page number.",
+        "input_json": "Complete serialized input snapshot. Embedded dates retain their original precision and provenance.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "extraction_outputs": {
+      "meaning": "Complete per-page provider responses, including failed or unconfirmed extraction evidence.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "report_id": "Identifier of the report that owns this row.",
+        "run_id": "Identifier of the extraction or analysis attempt. Separate attempts retain separate evidence.",
+        "page_number": "One-based document page number.",
+        "stage": "Extraction stage. The initial schema uses ocr.",
+        "response_body": "Complete OCR HTTP response body, including structured and raw model content.",
+        "status_code": "HTTP status code of the OCR response.",
+        "content": "Stored extracted text. It is not automatically confirmed clinical data.",
+        "model": "Provider-reported or configured model identifier for this attempt.",
+        "adapter": "Name of the provider adapter that produced the extraction response.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "extraction_pages": {
+      "meaning": "Per-page extraction status and readable text for each attempt.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "report_id": "Identifier of the report that owns this row.",
+        "run_id": "Identifier of the extraction or analysis attempt. Separate attempts retain separate evidence.",
+        "page_number": "One-based document page number.",
+        "status": "Stored workflow state. See the table-specific state description.",
+        "content": "Stored extracted text. It is not automatically confirmed clinical data.",
+        "model": "Provider-reported or configured model identifier for this attempt.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "health_connections": {
+      "meaning": "Platform installations. These rows do not grant device permissions or store provider authentication.",
+      "fields": {
+        "connection_id": "Identifier of a platform installation connection owned by this user.",
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "platform": "apple_health, health_connect, manual, or file_import. This identifies the ingestion platform.",
+        "installation_id": "Client installation identifier, scoped to the user and platform.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "health_records": {
+      "meaning": "Current source records. Manual entries store their tagged domain content inside payload.entry.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "platform": "apple_health, health_connect, manual, or file_import. This identifies the ingestion platform.",
+        "source_id": "Producer identifier within the platform. Different producers are not merged automatically.",
+        "record_id": "Source record identifier, scoped to user, platform and source_id.",
+        "record_type": "Source type or manual domain type. Unknown source types retain their raw payload.",
+        "start_at": "Record start as Unix seconds in UTC. Instant observations use the same start and end.",
+        "end_at": "Record end as Unix seconds in UTC. Duration calculations use half-open intervals.",
+        "version": "Current source record version. It does not identify the database schema.",
+        "deleted": "Integer tombstone flag: 1 means deleted and 0 means present.",
+        "payload_json": "Complete serialized record payload. Original values and units remain distinct from derived values."
+      }
+    },
+    "health_revisions": {
+      "meaning": "Retained original JSON revisions of source records.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "platform": "apple_health, health_connect, manual, or file_import. This identifies the ingestion platform.",
+        "source_id": "Producer identifier within the platform. Different producers are not merged automatically.",
+        "record_id": "Source record identifier, scoped to user, platform and source_id.",
+        "revision_id": "Unique archive revision identifier for a received health record.",
+        "raw_path": "Archive-relative path to the exact stored JSON revision under raw/<provider>/<user_id>/.",
+        "payload_json": "Complete serialized record payload. Original values and units remain distinct from derived values.",
+        "received_at": "Server receipt time as Unix seconds in UTC, separate from observation time."
+      }
+    },
+    "observation_revisions": {
+      "meaning": "Observation history. States are pending, confirmed or rejected. Only eligible confirmed values enter numeric trends.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "observation_id": "Identifier of an observation, scoped to its owner.",
+        "revision": "Monotonically increasing revision for this observation or report.",
+        "status": "Stored workflow state. See the table-specific state description.",
+        "payload_json": "Complete serialized record payload. Original values and units remain distinct from derived values.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "observations": {
+      "meaning": "Observation identities and current revision pointers.",
+      "fields": {
+        "observation_id": "Identifier of an observation, scoped to its owner.",
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "report_id": "Identifier of the report that owns this row.",
+        "current_revision": "Revision selected as the current observation state. Earlier revisions remain in the archive.",
+        "candidate_key": "Extraction candidate identity used to avoid repeated candidates, or null for manual additions."
+      }
+    },
+    "raw_files": {
+      "meaning": "Original document and photo metadata. Original bytes are separate archive members.",
+      "fields": {
+        "file_id": "Identifier of the original document or photo.",
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "upload_id": "Client request identifier used to prevent duplicate uploads, scoped to the owner.",
+        "original_name": "Original user-visible filename. It is not an extraction destination or executable path.",
+        "relative_path": "Archive-relative original file path under raw/<provider>/<user_id>/.",
+        "processing_path": "Historical path of a processing copy. The copy is excluded from exports and cleared during restoration.",
+        "processing_sha256": "SHA-256 of the processing copy, or null. Restoration clears this value with processing_path.",
+        "content_type": "Stored MIME type of the original file.",
+        "sha256": "Lowercase hexadecimal SHA-256 digest of the original bytes.",
+        "byte_count": "Size of the original file in bytes.",
+        "page_count": "Number of pages in the original document. Images have one page.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "report_relations": {
+      "meaning": "Explicit duplicate or superseded report relationships.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "report_id": "Identifier of the report that owns this row.",
+        "preferred_report_id": "The report selected as preferred over report_id.",
+        "kind": "Relation kind: duplicate or superseded."
+      }
+    },
+    "reports": {
+      "meaning": "Report identities, user-reviewed context and revision metadata.",
+      "fields": {
+        "report_id": "Identifier of the report that owns this row.",
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "file_id": "Identifier of the original document or photo.",
+        "revision": "Monotonically increasing revision for this observation or report.",
+        "context_json": "User-reviewed report context, including clinical dates and their original precision.",
+        "created_at": "Creation time as Unix seconds in UTC. It is not a clinical collection date."
+      }
+    },
+    "sync_batches": {
+      "meaning": "Accepted batch identities and content digests for replay handling.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "connection_id": "Identifier of a platform installation connection owned by this user.",
+        "batch_id": "Client batch identity scoped to connection_id. An exact retry does not create new revisions.",
+        "digest": "SHA-256 of the archived batch representation used for replay consistency.",
+        "received_at": "Server receipt time as Unix seconds in UTC, separate from observation time."
+      }
+    },
+    "sync_coverage": {
+      "meaning": "Reported sync status by connection and type. Sync success does not establish complete physiological coverage.",
+      "fields": {
+        "user_id": "Archive owner identifier. Every exported row belongs to the manifest owner.",
+        "connection_id": "Identifier of a platform installation connection owned by this user.",
+        "record_type": "Source type or manual domain type. Unknown source types retain their raw payload.",
+        "status": "Stored workflow state. See the table-specific state description.",
+        "last_sync_at": "Most recent sync attempt time as Unix seconds in UTC.",
+        "first_success_at": "First successful sync time as Unix seconds in UTC, or null if none.",
+        "last_success_at": "Most recent successful sync time as Unix seconds in UTC, or null if none."
+      }
+    },
+    "derived_results": {
+      "meaning": "Saved descriptive behavior analyses. Any source revision change removes these results, including their input snapshots.",
+      "fields": {
+        "result_id": "Saved result UUID, scoped to the owner.",
+        "user_id": "Archive owner identifier.",
+        "kind": "behavior_association.",
+        "algorithm_version": "Fixed version of the complete regression and sampling protocol.",
+        "input_revision": "Owner data revision at computation. Results are removed when that revision changes.",
+        "parameters_json": "Declared outcome, source, behaviors, covariates, dates, timezone and lag.",
+        "input_json": "Original input references, projected measurements and journal records used to reproduce this result.",
+        "output_json": "Complete result with all declared tests, uncertainty, missingness and method parameters.",
+        "created_at": "Server computation time as Unix seconds in UTC."
+      }
+    },
+    "daily_views": {
+      "meaning": "Revision-bound daily summaries and bounded recomputation state. Restored views recompute from source data.",
+      "fields": {
+        "user_id": "Owner identifier.",
+        "request_key": "SHA-256 of canonical request parameters.",
+        "parameters_json": "Date, time zone, and explicit source priorities.",
+        "input_revision": "Owner data revision used by this view.",
+        "status": "queued, running, ready, or failed.",
+        "result_json": "Current summary or null after invalidation.",
+        "claim_token": "Opaque worker lease token, not an account credential.",
+        "lease_until": "Lease expiry as Unix seconds.",
+        "attempts": "Attempts since the last source revision.",
+        "error_code": "Calculation failure code or null.",
+        "requested_at": "Last synchronous computation time as Unix seconds."
+      }
+    }
+  },
+  "manual_domains": {
+    "journal": "Boolean behaviors, numeric measurements with explicit units, local clock times as minutes from midnight, mood and perceived stress. Empty fields remain unknown.",
+    "training": "Session start and end, paused minutes, explicit duration basis, optional CR10 effort and answer time. Different duration bases do not combine.",
+    "training_day": "rest or all_sessions_logged, applied only to the recorded local date and timezone.",
+    "sleep_correction": "Source session and input revisions, user classification and optional estimated minutes. Source intervals remain unchanged.",
+    "nutrition": "Consumed food with optional macro and micronutrient amounts. Origin retains the selected portion and source snapshot. Missing amounts remain unknown.",
+    "body": "Weight in kg, optional body fat in percent from 0 to 100, and optional waist in cm.",
+    "blood_pressure": "Paired systolic and diastolic pressure in mmHg, optional pulse in bpm, arm and posture.",
+    "cycle": "Observed flow, symptoms and explicit cycle, pregnancy, postpartum or perimenopause context. Entries do not establish ovulation.",
+    "breathing": "Actual recorded duration in minutes and optional measured breaths per minute.",
+    "preferences": "Source priorities, favorite metrics and optional sleep goal in minutes, under the separate helpyourself.preferences source.",
+    "exercise": "Named exercise, equipment, muscle groups, instructions and notes. This library entry does not represent completed activity.",
+    "workout_template": "Named sequence of exercise prescriptions, sets, repetitions or duration, external weight and rest. Templates do not contribute training load.",
+    "planned_workout": "Dated workout prescription with planned or skipped status. Completion requires a separate training record.",
+    "food": "Nutrients per 100 grams, brand, optional barcode and source. Optional external_source retains the reviewed Open Food Facts response and retrieval time.",
+    "recipe": "Recipe yield and ingredient snapshots with grams, source and nutrients per 100 grams. Missing ingredient nutrients remain unknown.",
+    "nutrition_goals": "User-defined daily nutrient targets. These are preferences, not clinical treatment targets.",
+    "diet_quality": "Confirmed full-day food-pattern equivalents for HEI-2020, source and age eligibility. Duplicate dates or incomplete input stop the window score.",
+    "meal_plan": "Recipe snapshot, planned servings and planned or skipped status. Shopping quantities are grams. Plans do not count as consumed food.",
+    "reminder": "User-authored recurrence, local date and clock time, optional end date and quiet hours. Local notifications require explicit device scheduling.",
+    "memory": "User-editable context for archive questions, with an enabled flag. This content is not a verified health observation.",
+    "cycle_prediction": "External predicted date range, generation time, named source and uncertainty statement. Predictions remain separate from confirmed cycle observations."
+  },
+  "source_formats": {
+    "nn-intervals-v1": "Quality-reviewed NN intervals in milliseconds with second offsets, acquisition context, posture, device, firmware and protocol. Gaps and inconsistent durations stop RMSSD.",
+    "fit": "Original base64 bytes, SHA-256 and all decoded messages. Timestamp fields use UTC Unix seconds. Source timer and elapsed durations remain separate.",
+    "tcx-2": "Original UTF-8 XML, SHA-256, source laps and track points. Unmapped extensions remain in the original XML.",
+    "gpx-1.1": "Original UTF-8 XML and SHA-256. Distance uses coordinates within segments. Elapsed duration includes gaps."
+  }
+}

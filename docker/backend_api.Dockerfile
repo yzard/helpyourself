@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.98-bookworm AS builder
 RUN rustup component add rustfmt clippy
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
+RUN apt-get update && apt-get install -y --no-install-recommends python3 poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace/src/backend_api
+COPY src/archive/ /workspace/src/archive/
 COPY src/frontend/ /workspace/src/frontend/
 COPY src/backend_api/ /workspace/src/backend_api/
 COPY tests/backend_api/ /workspace/tests/backend_api/

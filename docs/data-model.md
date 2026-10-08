@@ -1,6 +1,6 @@
 # 数据模型与计算规则
 
-当前数据库以 `src/backend_api/database/schema.sql` 为准（schema v7）。只初始化空库或重开 v7；用户明确不需要 migration，旧迁移文件已移除。以下对应当前表与领域规则；所有用户数据表和关联都有用户归属。
+当前数据库以 `src/backend_api/database/schema.sql` 为准（schema v1）。只初始化空库或重开 v1；用户明确不需要 migration，旧迁移文件已移除。以下对应当前表与领域规则；所有用户数据表和关联都有用户归属。
 
 ## 实体
 
@@ -46,7 +46,7 @@
 
 每个已接收有效修订的完整 JSON 同时写入 `raw/apple_health/<user>/<revision>.json`，health_connect 写入 `raw/google_health/`。单条 payload 32 MiB、批次 40 MiB/500 条；超过上限明确失败并保留重试状态，不能截断后推进锚点。类型范围、快照和设备验证缺口见 [支持矩阵](validation/support-matrix.md)。
 
-照片原字节放 `raw/photos/`；HEIC 的处理 JPEG 放 derived，不替代原件。PDF 原字节放 raw/documents。手工录入、OCR 回复及审核历史完整保存 SQLite；导出 v3 将这些表和全部有效原件一起归档。
+照片原字节放 `raw/photos/`；HEIC 的处理 JPEG 放 derived，不替代原件。PDF 原字节放 raw/documents。手工录入、OCR 回复及审核历史完整保存 SQLite；导出 v1 将这些表和全部有效原件一起归档。
 
 同步连接标识与来源记录标识分离：两个手机读取同一 Apple Health 数据时，应在来源身份足够可靠时归并同一记录，否则保留候选关系。Android 补入后沿用相同原则。
 
@@ -72,6 +72,16 @@
 
 ## 当前单位与参考区间派生
 
-单一规则在 src/backend_api/laboratory.rs，版本 lab-units-v2。原始 payload 和修订不覆盖；API 查询与导出按同一规则重算派生解释，并记录版本/规则/来源。标准化字段不是独立事实或用户可直接提交的数据。10 项之外仍能完整归档，须保留未映射，不凭名称猜测。
+单一规则在 src/backend_api/laboratory.rs，版本 lab-units-v3。原始 payload 和修订不覆盖；API 查询与导出按同一规则重算派生解释，并记录版本/规则/来源。标准化字段不是独立事实或用户可直接提交的数据。17 项之外仍能完整归档，须保留未映射，不凭名称猜测。
 
 比较符/简单闭区间保留边界及包含性；文本、逗号歧义、条件化范围、未知单位及溢出返回明确不可比较原因。参考范围有显式单位时独立换算，否则采用结果列单位并明示出处。转换默认最多 6 位小数；同单位精度保留，非零微小值不会舍入成零。不存在通用“医学正常范围”或自动异常判断，report_flag 仍是报告原标记。
+
+### Derived research results
+
+The v1 schema includes `derived_results`. Each row belongs to one user and stores parameters, input snapshots, output, algorithm version, and source revision. A change to `users.data_revision` deletes that user's derived results. Account deletion also removes the rows. Export and empty-instance restore include this table. The complete export contains 18 tables.
+
+### Daily materialized views
+
+`daily_views` stores up to 64 requested day views per account. Each row records its input revision, parameters, result, retry count, and lease. Any archive revision queues the account’s views and clears old results. Workers use conditional claims and stop after three failed attempts. Restore clears cached results and queues recomputation. The schema remains version 1.
+
+Manual records now include exercises, workout templates, workout plans, foods, recipes, nutrition goals, reminders, coach memory, diet assessments, and meal plans. Each record uses the same owner, raw archive, revision, tombstone, and export rules. A meal plan stores a recipe snapshot. It does not count as consumed food. Coach drafts do not create records until the user saves them.

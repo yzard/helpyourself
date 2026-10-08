@@ -1,3 +1,4 @@
+import UserNotifications
 import Foundation
 import Observation
 import CryptoKit
@@ -14,6 +15,7 @@ final class AppModel {
     var errorMessage: String?
     var isBusy = false
     var lastRefresh: Date?
+    var offlineNotice: String?
     let health = HealthBridge()
     var client: APIClient? { session.map { APIClient(server: $0.server, token: $0.token) } }
 
@@ -31,6 +33,60 @@ final class AppModel {
         metrics = try cache.load([JSONValue].self, name: "metrics.json") ?? []
         lastRefresh = try cache.load(Date.self, name: "refresh.json")
         session = saved; archive = cache
+    }
+
+    private static let cachedReads: Set<String> = [
+        "wellness/day", "wellness/preferences/get", "wellness/sources", "wellness/series", "wellness/hrv",
+        "wellness/sleep", "wellness/sleep/regularity", "wellness/review", "wellness/timeline", "wellness/report",
+        "wellness/entries/list", "wellness/library", "wellness/nutrition/day", "wellness/diet", "wellness/meals",
+        "wellness/meal-glucose", "wellness/import/list", "wellness/records/list", "wellness/records/get", "trends/get"
+    ]
+    func request(_ path: String, body: JSONValue) async throws -> JSONValue {
+        guard let client, let archive, let token = session?.token else { throw APIError.invalidResponse }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let payload = try encoder.encode(body)
+        var keyData = Data(path.utf8); keyData.append(0); keyData.append(payload)
+        let key = "read-" + SHA256.hash(data: keyData).map { String(format: "%02x", $0) }.joined() + ".json"
+        let cacheable = Self.cachedReads.contains(path)
+        do {
+            let result = try await client.post(path, body: body)
+            guard !Task.isCancelled, session?.token == token else { throw CancellationError() }
+            if cacheable {
+                let saved: JSONValue = .object(["saved_at": .number(Date().timeIntervalSince1970), "result": result])
+                if let bytes = try? encoder.encode(saved), bytes.count <= 2 * 1024 * 1024 {
+                    try? archive.saveBytes(bytes, name: key)
+                    try? pruneReadCache()
+                }
+            } else if ["save", "delete", "update", "review", "confirm", "sync"].contains(path.split(separator: "/").last.map(String.init) ?? "") || path.hasPrefix("wellness/import/") && !path.hasSuffix("/list") {
+                try? clearReadCache()
+            }
+            return result
+        } catch {
+            guard !Task.isCancelled, session?.token == token else { throw CancellationError() }
+            if case APIError.status(401, _) = error { try clearLocalSession(); throw error }
+            if cacheable, let network = error as? URLError,
+               [.timedOut, .notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed].contains(network.code),
+               let snapshot = try? archive.load(JSONValue.self, name: key), let savedAt = snapshot["saved_at"].numberValue {
+                offlineNotice = "Cached view from " + Date(timeIntervalSince1970: savedAt).formatted() + (network.code == .timedOut ? ". Timeout." : ". Server unavailable.")
+                return snapshot["result"]
+            }
+            throw error
+        }
+    }
+    private func readCacheFiles() throws -> [URL] {
+        guard let archive else { return [] }
+        return try FileManager.default.contentsOfDirectory(at: archive.directory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]).filter { $0.lastPathComponent.hasPrefix("read-") && $0.pathExtension == "json" }
+    }
+    private func clearReadCache() throws {
+        for file in try readCacheFiles() { try FileManager.default.removeItem(at: file) }
+    }
+    private func pruneReadCache() throws {
+        let files = try readCacheFiles().sorted { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }
+        var bytes = 0
+        for (index, file) in files.enumerated() {
+            bytes += (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if index >= 64 || bytes > 32 * 1024 * 1024 { try FileManager.default.removeItem(at: file) }
+        }
     }
 
     func login(server: String, username: String, password: String) async {
@@ -65,7 +121,7 @@ final class AppModel {
                 let id = previous["report_id"].stringValue
                 try archive.remove(name: "report-\(id).json"); try archive.remove(name: "source-\(id)")
             }
-            capabilities = status["capabilities"]; reports = loaded; jobs = tasks; metrics = definitions; lastRefresh = Date()
+            offlineNotice = nil; capabilities = status["capabilities"]; reports = loaded; jobs = tasks; metrics = definitions; lastRefresh = Date()
             try archive.save(reports, name: "reports.json"); try archive.save(metrics, name: "metrics.json"); try archive.save(lastRefresh, name: "refresh.json")
         }
     }
@@ -123,7 +179,7 @@ final class AppModel {
 
     func synchronizeHealth(requestAccess: Bool, requestSelectedAccess: Bool = false) async {
         guard let client, let archive, !isBusy else { return }
-        await perform { try await health.synchronize(client: client, archive: archive, requestAccess: requestAccess, requestSelectedAccess: requestSelectedAccess) }
+        await perform { try await health.synchronize(client: client, archive: archive, requestAccess: requestAccess, requestSelectedAccess: requestSelectedAccess); try? clearReadCache() }
     }
 
     func logout() async {
@@ -146,13 +202,18 @@ final class AppModel {
 
     func clearLocalSession() throws {
         try SessionVault.clear(); try archive?.clear()
-        session = nil; archive = nil; reports = []; drafts = []; jobs = []; metrics = []; lastRefresh = nil; capabilities = .null; health.status = "Not connected"
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        offlineNotice = nil; session = nil; archive = nil; reports = []; drafts = []; jobs = []; metrics = []; lastRefresh = nil; capabilities = .null; health.status = "Not connected"
     }
 
     func perform(_ operation: () async throws -> Void) async {
         guard !isBusy else { return }
         isBusy = true; defer { isBusy = false }
         do { try await operation() }
-        catch { errorMessage = error.localizedDescription }
+        catch {
+            if case APIError.status(401, _) = error { try? clearLocalSession() }
+            errorMessage = error.localizedDescription
+        }
     }
 }

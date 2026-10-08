@@ -1,6 +1,6 @@
 # 化验数值、单位与参考区间契约
 
-版本：lab-units-v2。实现唯一入口是 src/backend_api/laboratory.rs；手机、OCR、分析和导出不各自实现另一套换算。模型负责保留印刷内容，人工确认 metric_id 后 API 生成可重算解释，原字段及每次修订不覆盖。
+版本：lab-units-v3。实现唯一入口是 src/backend_api/laboratory.rs；手机、OCR、分析和导出不各自实现另一套换算。模型负责保留印刷内容，人工确认 metric_id 后 API 生成可重算解释，原字段及每次修订不覆盖。
 
 ## 注册规则与依据
 
@@ -14,10 +14,14 @@
 | ApoB g/L | mg/dL = 输入 × 100 | [NIST SI 前缀](https://www.nist.gov/pml/owm/metric-si-prefixes)，结合 L/dL 的量纲换算 |
 | 血红蛋白 g/L | g/dL = 输入 ÷ 10 | 同上 |
 | 铁蛋白 µg/L | ng/mL = 输入 | 同上 |
+| 白蛋白 g/L | g/dL = 输入 ÷ 10 | SI 量纲换算，模型计算时显式转回 g/L |
+| CRP mg/L | mg/dL = 输入 ÷ 10 | SI 量纲换算 |
+| WBC 10³/µL | 10⁹/L = 输入 | 计数密度等价，非绝对淋巴细胞计数 |
+| MCV、ALP、淋巴细胞百分比、RDW-CV | fL、U/L、%、% | 只接受登记单位，不将 RDW-SD 或绝对计数转换为百分比 |
 
-同指标的常见质量浓度也按 SI 换算；mg/dL 为标准的指标接受 mg/L、g/L、g/dL、µg/L、µg/mL。血红蛋白另接受 mg/dL、mg/L，铁蛋白另接受 µg/mL、mg/L、ng/L。摩尔浓度只在有指标专属因子的血脂、血糖、肌酐接受；ApoB 不凭通用摩尔质量猜算。所有 10 项可接受单位以 API metrics/list 的 accepted_units 为准。
+同指标的常见质量浓度也按 SI 换算；mg/dL 为标准的指标接受 mg/L、g/L、g/dL、µg/L、µg/mL。血红蛋白另接受 mg/dL、mg/L，铁蛋白另接受 µg/mL、mg/L、ng/L。摩尔浓度只在有指标专属因子的血脂、血糖、肌酐接受；ApoB 不凭通用摩尔质量猜算。所有 17 项可接受单位以 API metrics/list 的 accepted_units 为准。
 
-别名仅为封闭集合：去空格，µ/μ/u 的已定义写法，常见小写 l 与全大写写法。不会普遍大小写折叠 SI 前缀，也不把 m9/dL 等 OCR 错字猜成 mg/dL。百分比属于已映射 HbA1c NGSP 语义，不将其他比值混入该指标。
+别名仅为封闭集合：去空格，µ/μ/u 的已定义写法，常见小写 l 与全大写写法。不会普遍大小写折叠 SI 前缀，也不把 m9/dL 等 OCR 错字猜成 mg/dL。百分比按已映射指标解释，包括 HbA1c NGSP、淋巴细胞百分比和 RDW-CV。不同指标不混用。
 
 ## 数字与边界
 
@@ -29,6 +33,6 @@
 
 解释含 version、result、reference；每个量含 status/reason、value 或上下界/包含性、original_unit/unit/unit_origin、display、rule/source。未知、缺单位、未映射及不可解析均有明确原因。report_flag 保持报告原标记，不由标准范围重新计算。
 
-趋势只使用已确认、已映射、具采样日期且 exact 可转换的有效行。返回原字段、派生参考范围、规则版本及 excluded 原因；导出 v3 JSONL 保留事实，辅助 CSV 附这些派生解释。iOS 分别标注原单位参考和标准化参考，防止混读。
+趋势只使用已确认、已映射、具采样日期且 exact 可转换的有效行。返回原字段、派生参考范围、规则版本及 excluded 原因；导出 v1 JSONL 保留事实，辅助 CSV 附这些派生解释。iOS 分别标注原单位参考和标准化参考，防止混读。
 
 本文件描述数据换算规则，不赋予跨方法、检验环境或参考人群的临床可比性。真实报告的漏项/单位错配准确性仍需授权样本验收。

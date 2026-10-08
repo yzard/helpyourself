@@ -1,0 +1,19 @@
+{
+  "cold_day_ms": 613.425471,
+  "history_days": 1095,
+  "rows": 1576800,
+  "sample_period_seconds": 60,
+  "scope": "synthetic query fixture, no device sync or original-file benchmark",
+  "seed_seconds": 6.676747649,
+  "warm_day_max_ms": 0.9249539999999999,
+  "warm_day_p95_ms": 0.886145,
+  "warm_repetitions": 20,
+  "date": "2026-10-06",
+  "host": {
+    "kernel": "7.2.8-arch1-2",
+    "logical_cpus": 16,
+    "cpu": "AMD Ryzen 7 9800X3D 8-Core Processor"
+  },
+  "cache_budget_ms": 500,
+  "budget_passed": true
+}

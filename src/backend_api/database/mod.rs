@@ -52,7 +52,7 @@ impl Database {
         let version: i64 = sqlx::query_scalar(queries::SCHEMA_VERSION)
             .fetch_one(&mut *transaction)
             .await?;
-        if version != 0 && version != 7 {
+        if version != 0 && version != 1 {
             return Err(AppError::Conflict(
                 "Unsupported database schema; use a fresh data directory",
             ));
@@ -66,13 +66,11 @@ impl Database {
             .execute(&mut *transaction)
             .await?;
         transaction.commit().await?;
-        for folder in [
-            "tmp",
-            "raw/apple_health",
-            "raw/google_health",
-            "raw/photos",
-            "raw/documents",
-        ] {
+        for folder in std::iter::once("tmp".to_owned()).chain(
+            crate::raw::SOURCES
+                .iter()
+                .map(|source| format!("raw/{source}")),
+        ) {
             tokio::fs::create_dir_all(directory.join(folder)).await?;
         }
         Ok(Self {
@@ -121,6 +119,22 @@ impl Database {
             .bind(username)
             .fetch_optional(&self.pool)
             .await?)
+    }
+
+    pub async fn enable_user(&self, username: &str, password_hash: &str) -> Result<(), AppError> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let user_id: String = sqlx::query_scalar(queries::ENABLE_USER)
+            .bind(password_hash)
+            .bind(username)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        sqlx::query(queries::REVOKE_USER_SESSIONS)
+            .bind(user_id)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn change_credentials(

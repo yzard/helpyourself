@@ -6,6 +6,7 @@ use crate::{
 };
 use futures_util::TryStreamExt;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::{Column, Row, TypeInfo, ValueRef};
 use std::{
     io::{BufRead, Write},
@@ -99,15 +100,11 @@ impl Database {
     }
     pub async fn delete_account(&self, user_id: &str) -> Result<(), AppError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        for folder in [
-            "raw/apple_health",
-            "raw/google_health",
-            "raw/photos",
-            "raw/documents",
-            "derived",
-            "tmp",
-            "exports",
-        ] {
+        for folder in crate::raw::SOURCES
+            .iter()
+            .map(|source| format!("raw/{source}"))
+            .chain(["derived", "tmp", "exports"].into_iter().map(str::to_owned))
+        {
             sqlx::query(queries::INSERT_CLEANUP)
                 .bind(uuid::Uuid::new_v4().to_string())
                 .bind(format!("{folder}/{user_id}"))
@@ -248,11 +245,20 @@ async fn build_export(state: &AppState, user_id: &str, export_id: &str) -> Resul
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(AppError::NotFound)?;
+    let mut table_counts = serde_json::Map::new();
+    let mut table_columns = serde_json::Map::new();
     for (table, query) in queries::EXPORT_TABLES {
+        let columns = sqlx::query(queries::EXPORT_COLUMNS)
+            .bind(table)
+            .fetch_all(&mut *transaction)
+            .await?;
+        table_columns.insert((*table).into(), json!(columns.into_iter().map(|r|json!({"name":r.get::<String,_>("name"),"sqlite_type":r.get::<String,_>("type"),"not_null":r.get::<i64,_>("notnull")!=0,"primary_key_position":r.get::<i64,_>("pk")})).collect::<Vec<_>>()));
+        let mut count = 0_u64;
         let mut output =
             tokio::fs::File::create(scratch.path().join(format!("{table}.jsonl"))).await?;
         let mut rows = sqlx::query(query).bind(user_id).fetch(&mut *transaction);
         while let Some(row) = rows.try_next().await? {
+            count += 1;
             let bytes = state
                 .database
                 .cpu
@@ -279,9 +285,12 @@ async fn build_export(state: &AppState, user_id: &str, export_id: &str) -> Resul
             output.write_all(b"\n").await?;
         }
         output.sync_all().await?;
+        table_counts.insert((*table).into(), json!(count));
     }
     transaction.commit().await?;
-    let manifest = json!({"format":"helpyourself-export","version":3,"data_revision":revision,"user_id":user_id,"created_at":now()?,
+    let field_dictionary: Value =
+        serde_json::from_str(include_str!("../archive/field_dictionary.json"))?;
+    let manifest = json!({"field_dictionary":field_dictionary,"format":"helpyourself-export","version":1,"database_schema_version":1,"table_counts":table_counts,"table_columns":table_columns,"data_revision":revision,"user_id":user_id,"created_at":now()?,
         "conversion_version":crate::laboratory::CONVERSION_VERSION,"metrics":crate::laboratory::metrics(),"tables":queries::EXPORT_TABLES.iter().map(|(name,_)|format!("{name}.jsonl")).collect::<Vec<_>>(),"raw_directory":"raw/","csv":"observations.csv",
         "notes":"JSONL is lossless. CSV formula-leading text is prefixed with an apostrophe. No passwords, sessions or provider secrets are exported."});
     tokio::fs::write(
@@ -336,23 +345,26 @@ fn write_zip(directory: &Path, raw: &Path) -> Result<(), AppError> {
     let mut archive = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
-    for name in std::iter::once("manifest.json".to_string()).chain(
-        queries::EXPORT_TABLES
-            .iter()
-            .map(|(table, _)| format!("{table}.jsonl")),
-    ) {
+    let mut members = serde_json::Map::new();
+    for name in queries::EXPORT_TABLES
+        .iter()
+        .map(|(table, _)| format!("{table}.jsonl"))
+    {
         archive
             .start_file(&name, options)
             .map_err(|_| AppError::Internal)?;
+        let mut member = DigestMember::new(&mut archive);
         std::io::copy(
             &mut std::fs::File::open(directory.join(&name))?,
-            &mut archive,
+            &mut member,
         )?;
+        members.insert(name, member.finish());
     }
     archive
         .start_file("observations.csv", options)
         .map_err(|_| AppError::Internal)?;
-    archive.write_all(b"observation_id,revision,status,name,result,unit,sampled_at,standardized_result,standard_unit,result_status,original_reference,standardized_reference,reference_status,conversion_version\n")?;
+    let mut csv_member = DigestMember::new(&mut archive);
+    csv_member.write_all(b"observation_id,revision,status,name,result,unit,sampled_at,standardized_result,standard_unit,result_status,original_reference,standardized_reference,reference_status,conversion_version\n")?;
     for line in std::io::BufReader::new(std::fs::File::open(
         directory.join("observation_revisions.jsonl"),
     )?)
@@ -382,7 +394,7 @@ fn write_zip(directory: &Path, raw: &Path) -> Result<(), AppError> {
             interpreted.reference.status.into(),
             crate::laboratory::CONVERSION_VERSION.into(),
         ];
-        archive.write_all(
+        csv_member.write_all(
             format!(
                 "{}\n",
                 fields
@@ -394,6 +406,7 @@ fn write_zip(directory: &Path, raw: &Path) -> Result<(), AppError> {
             .as_bytes(),
         )?;
     }
+    members.insert("observations.csv".into(), csv_member.finish());
     for (table, path_key) in [
         ("raw_files", "relative_path"),
         ("health_revisions", "raw_path"),
@@ -411,9 +424,21 @@ fn write_zip(directory: &Path, raw: &Path) -> Result<(), AppError> {
             archive
                 .start_file(path, options)
                 .map_err(|_| AppError::Internal)?;
-            std::io::copy(&mut std::fs::File::open(raw.join(path))?, &mut archive)?;
+            let mut member = DigestMember::new(&mut archive);
+            std::io::copy(&mut std::fs::File::open(raw.join(path))?, &mut member)?;
+            if members.insert(path.into(), member.finish()).is_some() {
+                return Err(AppError::Internal);
+            }
         }
     }
+    let mut manifest: Value =
+        serde_json::from_reader(std::fs::File::open(directory.join("manifest.json"))?)?;
+    manifest["members"] = Value::Object(members);
+    manifest["integrity"] = json!({"algorithm":"sha256","scope":"all_members_except_manifest","authenticity":"unsigned"});
+    archive
+        .start_file("manifest.json", options)
+        .map_err(|_| AppError::Internal)?;
+    serde_json::to_writer_pretty(&mut archive, &manifest)?;
     archive
         .finish()
         .map_err(|_| AppError::Internal)?
@@ -428,4 +453,33 @@ pub fn csv_cell(text: &str) -> String {
         text.to_string()
     };
     format!("\"{}\"", protected.replace('"', "\"\""))
+}
+
+struct DigestMember<'a, W: Write> {
+    writer: &'a mut W,
+    digest: Sha256,
+    bytes: u64,
+}
+impl<'a, W: Write> DigestMember<'a, W> {
+    fn new(writer: &'a mut W) -> Self {
+        Self {
+            writer,
+            digest: Sha256::new(),
+            bytes: 0,
+        }
+    }
+    fn finish(self) -> Value {
+        json!({"sha256":format!("{:x}",self.digest.finalize()),"byte_count":self.bytes})
+    }
+}
+impl<W: Write> Write for DigestMember<'_, W> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let count = self.writer.write(bytes)?;
+        self.digest.update(&bytes[..count]);
+        self.bytes += count as u64;
+        Ok(count)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()
+    }
 }

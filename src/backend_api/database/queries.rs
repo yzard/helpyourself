@@ -7,7 +7,7 @@ pub const PURGE_HEALTH_ORIGINS: &str =
     "DELETE FROM health_revisions WHERE user_id = ? AND platform = ? AND record_id = ?";
 pub const INSERT_ANALYSIS: &str = "INSERT INTO analysis_runs (run_id, user_id, status, input_digest, input_json, created_at, model) VALUES (?, ?, 'queued', ?, ?, ?, ?)";
 pub const ANALYSIS_BY_DIGEST: &str = "SELECT run_id FROM analysis_runs WHERE user_id = ? AND input_digest = ? AND status != 'stale' ORDER BY created_at DESC LIMIT 1";
-pub const ANALYSIS_LIST: &str = "SELECT run_id, status, output_json, error_code, created_at, model FROM analysis_runs WHERE user_id = ? ORDER BY created_at DESC LIMIT 100";
+pub const ANALYSIS_LIST: &str = "SELECT run_id, status, output_json, error_code, created_at, model, json_extract(input_json,'$.prompt_version') AS prompt_version FROM analysis_runs WHERE user_id = ? ORDER BY created_at DESC LIMIT 100";
 pub const ANALYSIS_GET: &str = "SELECT run_id, status, input_json, output_json, error_code, created_at, model FROM analysis_runs WHERE user_id = ? AND run_id = ?";
 pub const CLAIM_ANALYSIS: &str = "UPDATE analysis_runs SET status = 'running' WHERE run_id = (SELECT run_id FROM analysis_runs WHERE status = 'queued' ORDER BY created_at LIMIT 1) RETURNING run_id, user_id, input_json";
 pub const FINISH_ANALYSIS: &str = "UPDATE analysis_runs SET status = ?, output_json = ?, error_code = ? WHERE user_id = ? AND run_id = ? AND status = 'running'";
@@ -17,6 +17,11 @@ pub const RETRY_ANALYSIS: &str = "UPDATE analysis_runs SET status = 'queued', er
 pub const INSERT_FEEDBACK: &str = "INSERT INTO analysis_feedback (user_id, run_id, feedback_id, note, created_at) VALUES (?, ?, ?, ?, ?)";
 pub const ANALYSIS_FEEDBACK: &str = "SELECT feedback_id, note, created_at FROM analysis_feedback WHERE user_id = ? AND run_id = ? ORDER BY created_at";
 pub const EXPORT_TABLES: &[(&str, &str)] = &[
+    ("daily_views", "SELECT * FROM daily_views WHERE user_id = ?"),
+    (
+        "derived_results",
+        "SELECT * FROM derived_results WHERE user_id = ?",
+    ),
     (
         "deleted_uploads",
         "SELECT * FROM deleted_uploads WHERE user_id = ?",
@@ -102,7 +107,7 @@ pub const CONNECTION: &str =
 pub const SYNC_BATCH: &str =
     "SELECT digest FROM sync_batches WHERE user_id = ? AND connection_id = ? AND batch_id = ?";
 pub const INSERT_SYNC_BATCH: &str = "INSERT INTO sync_batches (user_id, connection_id, batch_id, digest, received_at) VALUES (?, ?, ?, ?, ?)";
-pub const HEALTH_RECORD: &str = "SELECT version, deleted, payload_json FROM health_records WHERE user_id = ? AND platform = ? AND source_id = ? AND record_id = ?";
+pub const HEALTH_RECORD: &str = "SELECT version, deleted, payload_json, record_type FROM health_records WHERE user_id = ? AND platform = ? AND source_id = ? AND record_id = ?";
 pub const UPSERT_HEALTH: &str = "INSERT INTO health_records (user_id, platform, source_id, record_id, record_type, start_at, end_at, version, deleted, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (user_id, platform, source_id, record_id) DO UPDATE SET record_type = excluded.record_type, start_at = excluded.start_at, end_at = excluded.end_at, version = excluded.version, deleted = excluded.deleted, payload_json = excluded.payload_json";
 pub const INSERT_HEALTH_REVISION: &str = "INSERT INTO health_revisions (user_id, platform, source_id, record_id, revision_id, raw_path, payload_json, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 pub const PURGE_HEALTH_REVISIONS: &str = "DELETE FROM health_revisions WHERE user_id = ? AND platform = ? AND source_id = ? AND record_id = ?";
@@ -162,7 +167,7 @@ pub const CANDIDATE_EXISTS: &str =
 pub const INSERT_PAGE: &str = "INSERT INTO extraction_pages (user_id, report_id, run_id, page_number, status, content, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 pub const EXTRACTION_PAGES: &str = "SELECT run_id, page_number, status, content, model, created_at FROM extraction_pages WHERE user_id = ? AND report_id = ? ORDER BY created_at DESC, run_id, page_number";
 
-pub const SET_SCHEMA_VERSION: &str = "PRAGMA user_version = 7";
+pub const SET_SCHEMA_VERSION: &str = "PRAGMA user_version = 1";
 
 pub const CREATE_USER: &str = r#"
 INSERT INTO users (user_id
@@ -482,3 +487,73 @@ pub const INSERT_EXTRACTION_INPUT: &str = "INSERT INTO extraction_inputs (user_i
 pub const EXTRACTION_INPUTS: &str = "SELECT run_id, page_number, created_at, json_extract(input_json, '$.text_layer.status') AS text_status, json_extract(input_json, '$.error_code') AS error_code FROM extraction_inputs WHERE user_id = ? AND report_id = ? ORDER BY created_at DESC, run_id, page_number";
 
 pub const EXTRACTION_INPUT: &str = "SELECT input_json FROM extraction_inputs WHERE user_id = ? AND report_id = ? AND run_id = ? AND page_number = ?";
+
+pub const WELLNESS_SOURCES: &str = "SELECT platform, source_id, record_type, COUNT(*) AS record_count, MIN(start_at) AS first_at, MAX(end_at) AS last_at FROM health_records WHERE user_id = ? AND deleted = 0 GROUP BY platform, source_id, record_type ORDER BY platform, source_id, record_type";
+
+// Domain reads are bounded independently from the complete raw archive.
+pub const WELLNESS_ENTRIES: &str = "SELECT platform, source_id, record_id, record_type, start_at, end_at, version, payload_json FROM health_records WHERE user_id = ? AND platform = 'manual' AND source_id = 'helpyourself' AND deleted = 0 AND start_at >= ? AND start_at < ? AND (? IS NULL OR record_type = ?) ORDER BY start_at DESC, record_id LIMIT 1001";
+pub const TRAINING_IMPORTS: &str = "SELECT source_id, record_id, start_at, end_at, version, json_extract(payload_json, '$.payload.filename') AS filename, json_extract(payload_json, '$.payload.distance_m') AS distance_m FROM health_records WHERE user_id = ? AND platform = 'file_import' AND source_id IN ('gpx-1.1','tcx-2','fit') AND deleted = 0 AND (? IS NULL OR record_id > ?) ORDER BY record_id LIMIT 101";
+
+pub const WELLNESS_SERIES: &str = r#"
+SELECT platform, source_id, record_id, version, start_at,
+       CASE WHEN json_type(payload_json,'$.payload.value') IN ('integer','real')
+            THEN CAST(json_extract(payload_json,'$.payload.value') AS REAL) ELSE NULL END AS value,
+       CASE WHEN json_type(payload_json,'$.payload.unit')='text'
+            THEN substr(json_extract(payload_json,'$.payload.unit'),1,64) ELSE NULL END AS unit
+  FROM health_records
+ WHERE user_id=? AND record_type=? AND deleted=0 AND start_at>=? AND start_at<?
+ ORDER BY platform,source_id,start_at,record_id
+ LIMIT 50001
+"#;
+
+pub const WELLNESS_TIMELINE: &str = r#"
+WITH events AS (
+    SELECT start_at AS event_at, json_array('health',platform,source_id,record_id) AS event_key,
+           record_id, record_type, platform || ':' || source_id AS source, version,
+           'record_start' AS time_semantics
+      FROM health_records
+     WHERE user_id=? AND start_at>=? AND start_at<? AND deleted=0
+       AND record_type IN ('sleep','workout','training','training_day','sleep_correction','journal','nutrition','cycle','body','blood_pressure','breathing')
+    UNION ALL
+    SELECT created_at, json_array('report',report_id), report_id, 'report', 'report_upload', revision, 'upload'
+      FROM reports WHERE user_id=? AND created_at>=? AND created_at<?
+)
+SELECT * FROM events
+ WHERE ? IS NULL OR event_at < ? OR (event_at = ? AND event_key > ?)
+ ORDER BY event_at DESC,event_key ASC
+ LIMIT 201
+"#;
+
+pub const EXPORT_COLUMNS: &str =
+    "SELECT name,type,\"notnull\",pk FROM pragma_table_info(?) ORDER BY cid";
+
+pub const ENABLE_USER: &str = r#"
+UPDATE users
+   SET password_hash = ?
+     , is_active = 1
+     , credential_version = credential_version + 1
+ WHERE username = ?
+RETURNING user_id
+"#;
+
+pub const INSERT_DERIVED_RESULT: &str = "INSERT INTO derived_results (result_id,user_id,kind,algorithm_version,input_revision,parameters_json,input_json,output_json,created_at) VALUES (?,?,'behavior_association',?,?,?,?,?,?)";
+pub const LIST_DERIVED_RESULTS: &str = "SELECT result_id,kind,algorithm_version,input_revision,parameters_json,created_at FROM derived_results WHERE user_id=? ORDER BY created_at DESC,result_id LIMIT 100";
+pub const GET_DERIVED_RESULT: &str =
+    "SELECT output_json FROM derived_results WHERE user_id=? AND result_id=?";
+pub const LIMIT_DERIVED_RESULTS: &str = "DELETE FROM derived_results WHERE user_id=? AND result_id NOT IN (SELECT result_id FROM derived_results WHERE user_id=? ORDER BY created_at DESC,result_id LIMIT 100)";
+
+pub const HRV_WINDOWS: &str = "SELECT platform, source_id, record_id, record_type, start_at, end_at, version, payload_json FROM health_records WHERE user_id = ? AND deleted = 0 AND record_type IN ('nn_intervals', 'heartbeat_series') AND start_at >= ? AND start_at < ? ORDER BY start_at, record_id LIMIT 1001";
+pub const WELLNESS_LIBRARY: &str = "SELECT platform, source_id, record_id, record_type, start_at, end_at, version, payload_json FROM health_records WHERE user_id = ? AND platform = 'manual' AND source_id = 'helpyourself' AND record_type = ? AND deleted = 0 ORDER BY start_at DESC, record_id LIMIT 1001";
+pub const FOOD_PORTION: &str = "SELECT platform, source_id, record_id, record_type, start_at, end_at, version, payload_json FROM health_records WHERE user_id = ? AND platform = 'manual' AND source_id = 'helpyourself' AND record_id = ? AND record_type IN ('food', 'recipe') AND deleted = 0";
+
+pub const SPECIALTY_LIST: &str = "SELECT platform,source_id,record_id,record_type,start_at,version FROM health_records WHERE user_id=? AND deleted=0 AND ((?='ecg' AND record_type='electrocardiogram') OR (?='clinical' AND json_type(payload_json,'$.payload.fhir')='object') OR (?='blood_pressure' AND record_type='HKCorrelationTypeIdentifierBloodPressure')) AND (? IS NULL OR (platform,source_id,record_id)>(?,?,?)) ORDER BY platform,source_id,record_id LIMIT 51";
+pub const SPECIALTY_GET: &str = "SELECT platform,source_id,record_id,record_type,start_at,end_at,version,payload_json FROM health_records WHERE user_id=? AND platform=? AND source_id=? AND record_id=? AND deleted=0";
+pub const RELATED_RECORDS: &str = "SELECT record_type,version,start_at,CASE WHEN json_type(payload_json,'$.payload.value') IN ('real','integer') THEN CAST(json_extract(payload_json,'$.payload.value') AS REAL) END AS value,json_extract(payload_json,'$.payload.unit') AS unit FROM health_records WHERE user_id=? AND platform=? AND source_id=? AND record_id=? AND deleted=0 LIMIT 1";
+
+pub const DAILY_VIEW_GET: &str = "SELECT result_json FROM daily_views WHERE user_id=? AND request_key=? AND status='ready' AND input_revision=(SELECT data_revision FROM users WHERE user_id=?)";
+pub const DAILY_VIEW_SAVE: &str = "INSERT INTO daily_views(user_id,request_key,parameters_json,input_revision,status,result_json,requested_at) VALUES(?,?,?,?,'ready',?,?) ON CONFLICT(user_id,request_key) DO UPDATE SET input_revision=excluded.input_revision,status='ready',result_json=excluded.result_json,claim_token=NULL,lease_until=NULL,attempts=0,error_code=NULL,requested_at=excluded.requested_at";
+pub const DAILY_VIEW_LIMIT: &str = "DELETE FROM daily_views WHERE user_id=? AND request_key NOT IN (SELECT request_key FROM daily_views WHERE user_id=? ORDER BY requested_at DESC,request_key LIMIT 64)";
+pub const DAILY_VIEW_CLAIM: &str = "UPDATE daily_views SET status='running',claim_token=?,lease_until=?,attempts=attempts+1 WHERE (user_id,request_key)=(SELECT user_id,request_key FROM daily_views WHERE status='queued' OR (status='running' AND lease_until<=?) ORDER BY requested_at,user_id,request_key LIMIT 1) RETURNING user_id,request_key,parameters_json,input_revision,attempts";
+pub const DAILY_VIEW_FINISH: &str = "UPDATE daily_views SET status='ready',result_json=?,claim_token=NULL,lease_until=NULL,error_code=NULL WHERE user_id=? AND request_key=? AND claim_token=? AND input_revision=? AND input_revision=(SELECT data_revision FROM users WHERE user_id=?)";
+pub const DAILY_VIEW_FAIL: &str = "UPDATE daily_views SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END,claim_token=NULL,lease_until=NULL,error_code='calculation_failed' WHERE user_id=? AND request_key=? AND claim_token=?";
+pub const DAILY_VIEW_EXHAUSTED: &str = "UPDATE daily_views SET status='failed',claim_token=NULL,lease_until=NULL,error_code='attempts_exhausted' WHERE status='running' AND attempts>=3 AND lease_until<=?";

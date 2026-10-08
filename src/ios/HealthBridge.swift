@@ -170,6 +170,11 @@ final class HealthBridge {
                 payload["unit"] = .string(unit)
             }
         }
+        if let ecg = sample as? HKElectrocardiogram {
+            payload["ecg_classification"] = .number(Double(ecg.classification.rawValue))
+            payload["ecg_symptoms_status"] = .number(Double(ecg.symptomsStatus.rawValue))
+            if let frequency = ecg.samplingFrequency { payload["sampling_frequency_hz"] = .number(frequency.doubleValue(for: HKUnit.hertz())) }
+        }
         if let clinical = sample as? HKClinicalRecord, let resource = clinical.fhirResource {
             payload["fhir"] = .object(["resource_type": .string(resource.resourceType.rawValue), "identifier": .string(resource.identifier),
                                         "data_base64": .string(resource.data.base64EncodedString())])

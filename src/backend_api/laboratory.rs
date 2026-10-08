@@ -4,10 +4,10 @@ use rust_decimal::Decimal;
 use serde::Serialize;
 use std::str::FromStr;
 
-pub const CONVERSION_VERSION: &str = "lab-units-v2";
+pub const CONVERSION_VERSION: &str = "lab-units-v3";
 pub const CANONICAL_UNITS: &[&str] = &[
     "mg/dL", "mg/L", "g/L", "g/dL", "mmol/L", "µmol/L", "ng/mL", "µg/L", "µg/mL", "ng/L", "%",
-    "mmol/mol",
+    "mmol/mol", "fL", "U/L", "10^9/L",
 ];
 
 #[derive(Serialize)]
@@ -30,6 +30,13 @@ pub fn metrics() -> Vec<MetricDefinition> {
         ("hemoglobin", "Hemoglobin", "g/dL"),
         ("creatinine", "Creatinine", "mg/dL"),
         ("ferritin", "Ferritin", "ng/mL"),
+        ("albumin", "Albumin", "g/dL"),
+        ("crp", "C-reactive protein", "mg/dL"),
+        ("lymphocyte_percent", "Lymphocytes", "%"),
+        ("mcv", "Mean corpuscular volume", "fL"),
+        ("rdw", "Red cell distribution width (CV)", "%"),
+        ("alp", "Alkaline phosphatase", "U/L"),
+        ("wbc", "White blood cell count", "10^9/L"),
     ]
     .into_iter()
     .map(|(metric_id, name, standard_unit)| MetricDefinition {
@@ -72,6 +79,9 @@ pub fn canonical_unit(raw: &str) -> Option<&'static str> {
         "ng/L" | "ng/l" | "NG/L" => Some("ng/L"),
         "%" | "%NGSP" | "NGSP%" => Some("%"),
         "mmol/mol" | "MMOL/MOL" => Some("mmol/mol"),
+        "fL" | "fl" => Some("fL"),
+        "U/L" | "IU/L" => Some("U/L"),
+        "10^9/L" | "10⁹/L" | "10^3/uL" | "10³/uL" => Some("10^9/L"),
         _ => None,
     }
 }

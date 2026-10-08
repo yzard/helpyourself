@@ -1,5 +1,7 @@
 # 系统架构与部署
 
+项目为开源软件健康数据中心，不包含硬件或固件。设备数据经公开接口、系统健康平台或文件导入进入 API；封闭设备不支持。新增连接器与分析必须同时接入导出和删除，见[实施计划](implementation-whoop-bevel.md)。
+
 ## 组件
 
 ```mermaid
@@ -111,7 +113,7 @@ Apple Health 每个接收修订保存完整 JSON envelope；SQLite 同时保存�
 
 backend_ocr 的最终 HTTP 回复保存到 SQLite extraction_outputs（stage=ocr），其中包含完整 NInfer raw_response_body、正文、提示版本及结构化结果。非 2xx 和结构解析失败的已接收回复同样先归档；无响应或超过限额的内容不伪造为完整。当前 schema 只接受 ocr stage，旧 document_parser 适配与配置已移除；按用户要求不提供迁移。人工补项及每次修正保存不可变 observation_revisions，不受 HealthKit 是否能表达该字段影响。
 
-数据库当前 schema v7 是新库定义；按空 playground 的用户要求移除历史迁移。空库初始化、v7 重启；其他版本明确拒绝启动，不自动清库。
+数据库当前 schema v1 是新库定义；按空 playground 的用户要求移除历史迁移。空库初始化、v1 重启；其他版本明确拒绝启动，不自动清库。
 
 SQLite 与文件系统不能共用一个事务：上传先写临时文件并校验，再原子移动到目标路径，最后事务提交文件记录和任务。失败产生的孤立文件由可重跑清理任务处理；接口只有全部持久化成功才返回归档接收成功。
 

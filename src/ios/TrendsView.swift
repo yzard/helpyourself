@@ -9,6 +9,13 @@ struct TrendsView: View {
     @State private var preview: DocumentLocation?
     var body: some View {
         List {
+            Section {
+                NavigationLink("Cycle and life stages", destination: CycleHistoryView(model: model))
+                NavigationLink("Compare measurements", destination: ComparisonView(model: model))
+                NavigationLink("Long-term health report", destination: HealthReportView(model: model))
+                NavigationLink("Device trends", destination: DeviceTrendsView(model: model))
+                NavigationLink("Review daily logs", destination: ArchiveReviewView(model: model))
+            }
             Section("Choose metrics") {
                 picker("Metric", selection: $selected)
                 Toggle("Compare a second metric", isOn: $comparing)
@@ -62,6 +69,6 @@ private struct TrendSeries: View {
                 if let time, let point = result["points"].arrayValue.min(by: { abs(($0["timestamp"].numberValue ?? 0) - time) < abs(($1["timestamp"].numberValue ?? 0) - time) }) { show(point); selectedTime = nil }
             }
     }
-    private func reload() async { do { if let client = model.client { result = try await client.post("trends/get", body: .object(["metric_ids": .array([.string(metric)])])) } } catch { model.errorMessage = error.localizedDescription } }
+    private func reload() async { do { if let client = model.client { result = try await model.request("trends/get", body: .object(["metric_ids": .array([.string(metric)])])) } } catch { model.errorMessage = error.localizedDescription } }
     private func show(_ point: JSONValue) { Task { do { openPreview(DocumentLocation(url: try await model.source(point["report_id"].stringValue), page: Int(point["original"]["source"]["page"].numberValue ?? 1))) } catch { model.errorMessage = error.localizedDescription } } }
 }

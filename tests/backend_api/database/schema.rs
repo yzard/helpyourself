@@ -17,7 +17,7 @@ async fn current_schema_has_raw_indexes_and_enforces_extraction_owner() {
         .fetch_one(&mut connection)
         .await
         .unwrap();
-    assert_eq!(version, 7);
+    assert_eq!(version, 1);
     let error = sqlx::query("INSERT INTO extraction_outputs (user_id, report_id, run_id, page_number, stage, response_body, status_code, model, adapter, created_at) VALUES ('missing', 'missing', 'run', 1, 'ocr', '{}', 200, 'model', 'adapter', 1)")
         .execute(&mut connection).await.unwrap_err();
     assert!(matches!(error, sqlx::Error::Database(error) if error.is_foreign_key_violation()));

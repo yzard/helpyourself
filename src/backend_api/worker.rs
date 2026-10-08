@@ -25,7 +25,8 @@ pub async fn run(state: AppState, stop: CancellationToken) {
             extraction_loop(state.clone()),
             maintenance_loop(state.clone()),
             analysis_loop(state.clone()),
-            export_loop(state)
+            export_loop(state.clone()),
+            daily_view_loop(state)
         );
     };
     tokio::select! {_ = stop.cancelled()=>{}, _ = tasks=>{}}
@@ -474,4 +475,18 @@ async fn save_input(
         .await?;
     transaction.commit().await?;
     Ok(())
+}
+
+async fn daily_view_loop(state: AppState) {
+    let mut tick = tokio::time::interval(Duration::from_secs(2));
+    loop {
+        tick.tick().await;
+        let Ok(_permit) = state.health_slots.try_acquire() else {
+            continue;
+        };
+        let result = async { state.database.recompute_daily_next(now()?, 60).await }.await;
+        if let Err(error) = result {
+            tracing::warn!(code=%error,"daily view recomputation failed");
+        }
+    }
 }

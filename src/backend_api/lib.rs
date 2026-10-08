@@ -23,4 +23,5 @@ pub mod routes;
 pub mod temporary;
 pub mod transport;
 pub mod webgui;
+pub mod wellness;
 pub mod worker;

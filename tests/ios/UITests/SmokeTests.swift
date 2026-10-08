@@ -12,8 +12,11 @@ nonisolated final class SmokeTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
     }
     @MainActor private func tapTab(_ app: XCUIApplication, _ name: String) {
-        let frame = app.tabBars.buttons[name].frame
+        let tab = name == "Health" ? "Data" : name == "Settings" ? "Overview" : name
+        let frame = app.tabBars.buttons[tab].frame
         app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
+        if name == "Health", app.buttons["Apple Health and sync coverage"].exists { app.buttons["Apple Health and sync coverage"].tap() }
+        if name == "Settings", !app.navigationBars["Settings"].exists { app.buttons["Settings"].firstMatch.tap() }
     }
     @MainActor func testLoginTabsAndHealthAuthorization() async throws {
         addUIInterruptionMonitor(withDescription: "Synthetic password prompt") { alert in
@@ -39,13 +42,15 @@ nonisolated final class SmokeTests: XCTestCase {
         app.secureTextFields["Password"].tap()
         app.secureTextFields["Password"].typeText("synthetic-test-password")
         app.buttons["Sign in"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Reports"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.tabBars.buttons["Archive"].waitForExistence(timeout: 20))
+        tapTab(app, "Archive")
         if app.buttons["Not Now"].waitForExistence(timeout: 3) { app.buttons["Not Now"].tap() }
         XCTAssertTrue(app.staticTexts["Add your first report"].exists)
         // Relaunch after the system password sheet to verify Keychain restoration.
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Reports"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Archive"].waitForExistence(timeout: 10))
+        tapTab(app, "Archive")
         app.buttons["Add"].tap()
         XCTAssertTrue(app.buttons["Import PDF or image"].waitForExistence(timeout: 5))
         app.buttons["Import PDF or image"].tap()
@@ -80,7 +85,7 @@ nonisolated final class SmokeTests: XCTestCase {
         _ = try await URLSession.shared.data(for: seed)
         app.terminate()
         app.launch()
-        tapTab(app, "Reports")
+        tapTab(app, "Archive")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "fixture.png")).firstMatch.waitForExistence(timeout: 10))
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "fixture.png")).firstMatch.tap()
         XCTAssertTrue(app.buttons["Collection context"].waitForExistence(timeout: 10))
@@ -129,7 +134,7 @@ nonisolated final class SmokeTests: XCTestCase {
         try await control("test/enable-workflows")
         let app = XCUIApplication()
         app.launch()
-        if app.tabBars.buttons["Settings"].exists {
+        if app.tabBars.buttons["Data"].exists {
             tapTab(app, "Settings")
             app.buttons["Sign out and clear this device"].tap()
         }
@@ -142,9 +147,11 @@ nonisolated final class SmokeTests: XCTestCase {
         app.textFields["Username"].tap(); app.textFields["Username"].typeText("simulator")
         app.secureTextFields["Password"].tap(); app.secureTextFields["Password"].typeText("synthetic-test-password")
         app.buttons["Sign in"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Reports"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.tabBars.buttons["Archive"].waitForExistence(timeout: 15))
+        tapTab(app, "Archive")
         if app.buttons["Not Now"].waitForExistence(timeout: 3) { app.buttons["Not Now"].tap() }
         app.terminate(); app.launch()
+        tapTab(app, "Archive")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "fixture.png")).firstMatch.waitForExistence(timeout: 10))
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "fixture.png")).firstMatch.tap()
         XCTAssertTrue(app.buttons["Add result manually"].waitForExistence(timeout: 5))

@@ -6,7 +6,14 @@ use sqlx::Row;
 use std::{collections::HashSet, path::Path};
 use tokio::io::AsyncWriteExt;
 
-pub const SOURCES: &[&str] = &["apple_health", "google_health", "photos", "documents"];
+pub const SOURCES: &[&str] = &[
+    "apple_health",
+    "google_health",
+    "photos",
+    "documents",
+    "manual",
+    "file_import",
+];
 
 pub fn document_path(user_id: &str, file_id: &str, content_type: &str) -> String {
     let source = if content_type.starts_with("image/") {
@@ -21,6 +28,8 @@ pub fn health_path(user_id: &str, platform: &str, revision_id: &str) -> Result<S
     let source = match platform {
         "apple_health" => "apple_health",
         "health_connect" => "google_health",
+        "manual" => "manual",
+        "file_import" => "file_import",
         _ => return Err(AppError::Invalid("Unknown health platform")),
     };
     Ok(format!("raw/{source}/{user_id}/{revision_id}.json"))

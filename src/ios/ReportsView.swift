@@ -111,7 +111,7 @@ struct ReportView: View {
                 Button("Duplicate or revised report", systemImage: "doc.on.doc") { relationsVisible = true }
                 if !document["duplicate_candidates"].arrayValue.isEmpty { Text("An identical file already exists. Review the duplicate relationship before confirming results.").font(.caption).foregroundStyle(.orange) }
                 if let job = model.jobs.first(where: { $0["file_id"].stringValue == reportID }), job["status"] == .string("failed") {
-                    Button("Retry failed extraction") { Task { await model.perform { if let client = model.client { _ = try await client.post("jobs/retry", body: .object(["job_id": job["job_id"]])) } }; await model.refresh(); await reload() } }
+                    Button("Retry failed extraction") { Task { await model.perform { if let client = model.client { _ = try await model.request("jobs/retry", body: .object(["job_id": job["job_id"]])) } }; await model.refresh(); await reload() } }
                 }
                 if !document["relation"]["preferred_report_id"].stringValue.isEmpty {
                     Text("Excluded from trends: \(document["relation"]["kind"].stringValue). Original data is retained.").font(.caption)
@@ -190,7 +190,7 @@ struct ReportView: View {
         .confirmationDialog("Delete the original file, results and related analysis?", isPresented: $deleting) {
             Button("Delete report", role: .destructive) { Task { await model.perform {
                 guard let client = model.client else { return }
-                _ = try await client.post("reports/delete", body: .object(["report_id": .string(reportID), "expected_revision": document["report"]["revision"]]))
+                _ = try await model.request("reports/delete", body: .object(["report_id": .string(reportID), "expected_revision": document["report"]["revision"]]))
                 try model.archive?.remove(name: "report-\(reportID).json"); try model.archive?.remove(name: "source-\(reportID)")
                 dismiss()
             }; await model.refresh() } }
@@ -199,20 +199,20 @@ struct ReportView: View {
     private func reload() async { do { document = try await model.report(reportID) } catch { model.errorMessage = error.localizedDescription } }
     private func save(observations: [JSONValue], context: JSONValue) async throws {
         guard let client = model.client else { throw APIError.invalidResponse }
-        document = try await client.post("reports/review", body: .object(["report_id": .string(reportID), "expected_revision": document["report"]["revision"], "context": context, "observations": .array(observations)]))
+        document = try await model.request("reports/review", body: .object(["report_id": .string(reportID), "expected_revision": document["report"]["revision"], "context": context, "observations": .array(observations)]))
         try model.archive?.save(document, name: "report-\(reportID).json")
         await model.refresh()
     }
     private func showSource(page: Int) { Task { do { preview = DocumentLocation(url: try await model.source(reportID), page: page) } catch { model.errorMessage = error.localizedDescription } } }
     private func relate(to preferred: String, kind: String) async {
         await model.perform { guard let client = model.client else { return }
-            _ = try await client.post("reports/relate", body: .object(["report_id": .string(reportID), "preferred_report_id": .string(preferred), "kind": .string(kind), "expected_revision": document["report"]["revision"]]))
+            _ = try await model.request("reports/relate", body: .object(["report_id": .string(reportID), "preferred_report_id": .string(preferred), "kind": .string(kind), "expected_revision": document["report"]["revision"]]))
             relationsVisible = false
         }; await reload()
     }
     private func unlink() async {
         await model.perform { guard let client = model.client else { return }
-            _ = try await client.post("reports/relate", body: .object(["report_id": .string(reportID), "preferred_report_id": .null, "kind": .string("duplicate"), "expected_revision": document["report"]["revision"]]))
+            _ = try await model.request("reports/relate", body: .object(["report_id": .string(reportID), "preferred_report_id": .null, "kind": .string("duplicate"), "expected_revision": document["report"]["revision"]]))
         }; await reload()
     }
 }
@@ -225,7 +225,7 @@ private struct ObservationHistory: View {
         List(Array(history.enumerated()), id: \.offset) { _, revision in
             VStack(alignment: .leading) { Text("Revision \(Int(revision["revision"].numberValue ?? 0)) · \(revision["status"].stringValue)").font(.headline)
                 Text("\(revision["payload"]["raw_name"].stringValue): \(revision["payload"]["raw_result"].stringValue) \(revision["payload"]["raw_unit"].stringValue)") }
-        }.navigationTitle("Revision history").task { do { if let client = model.client { history = try await client.post("observations/history", body: .object(["observation_id": .string(observationID)]))["history"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
+        }.navigationTitle("Revision history").task { do { if let client = model.client { history = try await model.request("observations/history", body: .object(["observation_id": .string(observationID)]))["history"].arrayValue } } catch { model.errorMessage = error.localizedDescription } }
     }
 }
 
@@ -242,7 +242,7 @@ private struct ExtractionOutputView: View {
         }.padding() }.navigationTitle("Original OCR output").task {
             do {
                 guard let client = model.client else { return }
-                original = try await client.post("reports/extraction/get", body: .object(["report_id": .string(reportID), "run_id": output["run_id"], "page": output["page"], "stage": output["stage"]]))
+                original = try await model.request("reports/extraction/get", body: .object(["report_id": .string(reportID), "run_id": output["run_id"], "page": output["page"], "stage": output["stage"]]))
             } catch { model.errorMessage = error.localizedDescription }
         }
     }
@@ -275,7 +275,7 @@ private struct ReviewedGlucoseWriter: View {
                         guard var current = report["observations"].arrayValue.first(where: { $0["observation_id"] == observation["observation_id"] }) else { throw APIError.invalidResponse }
                         if current["payload"] != desired {
                             guard current["revision"] == observation["revision"] else { throw APIError.status(409, "This result changed. Reload it before saving to Apple Health") }
-                            report = try await client.post("reports/review", body: .object(["report_id": observation["report_id"], "expected_revision": report["report"]["revision"], "context": .null,
+                            report = try await model.request("reports/review", body: .object(["report_id": observation["report_id"], "expected_revision": report["report"]["revision"], "context": .null,
                                 "observations": .array([.object(["observation_id": observation["observation_id"], "expected_revision": current["revision"], "status": .string("confirmed"), "payload": desired])])]))
                             guard let updated = report["observations"].arrayValue.first(where: { $0["observation_id"] == observation["observation_id"] }) else { throw APIError.invalidResponse }
                             current = updated
@@ -312,7 +312,7 @@ private struct DocumentEvidenceView: View {
         }.navigationTitle("Document evidence").task {
             do {
                 guard let client = model.client else { return }
-                evidence = try await client.post("reports/input/get", body: .object(["report_id": .string(reportID), "run_id": input["run_id"], "page": input["page"]]))
+                evidence = try await model.request("reports/input/get", body: .object(["report_id": .string(reportID), "run_id": input["run_id"], "page": input["page"]]))
             } catch { self.error = error.localizedDescription }
         }
     }

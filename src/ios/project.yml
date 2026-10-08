@@ -30,6 +30,8 @@ targets:
         NSHealthClinicalHealthRecordsShareUsageDescription: Archive your clinical Health Records and their original FHIR data on your own server.
         NSHealthUpdateUsageDescription: Save reviewed blood glucose results to Apple Health after you verify their collection time.
         NSHealthShareUsageDescription: Sync your selected health history to your own helpyourself server for your archive and trends.
+        NSMicrophoneUsageDescription: Dictate a question for review before sending it to your server.
+        NSSpeechRecognitionUsageDescription: Convert your question to text on this device before you choose to submit it.
         NSCameraUsageDescription: Scan paper laboratory reports into your personal archive.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

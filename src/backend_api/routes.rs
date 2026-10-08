@@ -56,6 +56,67 @@ pub fn router(upload_limit: usize) -> Router<AppState> {
             get(download_raw_health),
         )
         .route("/api/v1/health/aggregate", post(aggregate_health))
+        .route(
+            "/api/v1/wellness/entries/save",
+            post(wellness_entry_save).layer(DefaultBodyLimit::max(256 * 1024)),
+        )
+        .route("/api/v1/wellness/entries/list", post(wellness_entry_list))
+        .route(
+            "/api/v1/wellness/entries/delete",
+            post(wellness_entry_delete),
+        )
+        .route(
+            "/api/v1/wellness/import/gpx",
+            post(wellness_import_gpx).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route(
+            "/api/v1/wellness/import/tcx",
+            post(wellness_import_tcx).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route("/api/v1/wellness/import/list", post(wellness_import_list))
+        .route(
+            "/api/v1/wellness/import/delete",
+            post(wellness_import_delete),
+        )
+        .route(
+            "/api/v1/wellness/preferences/get",
+            post(wellness_preferences),
+        )
+        .route(
+            "/api/v1/wellness/preferences/save",
+            post(wellness_preferences_save),
+        )
+        .route("/api/v1/wellness/sleep", post(wellness_sleep))
+        .route(
+            "/api/v1/wellness/sleep/regularity",
+            post(wellness_regularity),
+        )
+        .route("/api/v1/wellness/clinical-age", post(wellness_clinical_age))
+        .route("/api/v1/wellness/day", post(wellness_day))
+        .route("/api/v1/wellness/series", post(wellness_series))
+        .route("/api/v1/wellness/hrv", post(wellness_hrv))
+        .route("/api/v1/wellness/library", post(wellness_library))
+        .route("/api/v1/wellness/import/fit", post(import_fit))
+        .route("/api/v1/wellness/coach", post(request_coach))
+        .route("/api/v1/wellness/reminders", post(reminder_occurrences))
+        .route("/api/v1/wellness/records/list", post(specialty_records))
+        .route("/api/v1/wellness/records/get", post(specialty_record))
+        .route("/api/v1/wellness/food/portion", post(food_portion))
+        .route("/api/v1/wellness/food/lookup", post(food_lookup))
+        .route("/api/v1/wellness/nutrition/day", post(nutrition_day))
+        .route("/api/v1/wellness/timeline", post(wellness_timeline))
+        .route("/api/v1/wellness/review", post(wellness_review))
+        .route("/api/v1/wellness/report", post(wellness_report))
+        .route("/api/v1/wellness/diet", post(wellness_diet))
+        .route("/api/v1/wellness/meals", post(wellness_meals))
+        .route("/api/v1/wellness/meal-glucose", post(wellness_meal_glucose))
+        .route("/api/v1/wellness/associations/run", post(associations_run))
+        .route(
+            "/api/v1/wellness/associations/list",
+            post(associations_list),
+        )
+        .route("/api/v1/wellness/associations/get", post(associations_get))
+        .route("/api/v1/wellness/sources", post(wellness_sources))
         .route("/api/v1/server/status", post(status))
         .route("/api/v1/session/login", post(login))
         .route("/api/v1/session/logout", post(logout))
@@ -386,6 +447,11 @@ async fn connect_health(
     current: CurrentUser,
     Json(request): Json<crate::health::ConnectionRequest>,
 ) -> Result<Json<crate::health::Connection>, AppError> {
+    if !["apple_health", "health_connect"].contains(&request.platform.as_str()) {
+        return Err(AppError::Invalid(
+            "Use the domain import endpoint for this source",
+        ));
+    }
     Ok(Json(
         state
             .database
@@ -399,6 +465,10 @@ async fn sync_health(
     body: crate::transport::HealthSyncBody,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let _guard = state.file_mutation.lock().await;
+    state
+        .database
+        .require_device_connection(&current.user.user_id, &body.batch.connection_id)
+        .await?;
     Ok(Json(
         state
             .database
@@ -491,7 +561,7 @@ async fn aggregate_health(
 async fn status(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(
         json!({"status":"ok", "api_version":1, "capabilities":{"file_archive":true,"document_extraction":true,
-        "review":true,"trends":true,"health_sync":true,"export":true,"delete":true,"analysis":state.config.providers.analysis.enabled}}),
+        "review":true,"trends":true,"health_sync":true,"wellness_day":true,"manual_entries":true,"export":true,"delete":true,"analysis":state.config.providers.analysis.enabled}}),
     )
 }
 
@@ -612,4 +682,514 @@ async fn get_extraction_input(
             .await?,
     )
     .await
+}
+
+async fn wellness_day(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::DayRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .wellness_day(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn wellness_sources(
+    State(state): State<AppState>,
+    current: CurrentUser,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .wellness_sources(&current.user.user_id)
+            .await?,
+    ))
+}
+
+async fn wellness_entry_save(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::entries::SaveRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .save_wellness_entry(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn wellness_entry_list(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::entries::ListRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .list_wellness_entries(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn wellness_entry_delete(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::entries::DeleteRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .delete_wellness_entry(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_import_gpx(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::import::XmlImportRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _slot = state
+        .health_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AppError::RateLimited)?;
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .import_gpx(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_sleep(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::sleep::SleepRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .sleep_sessions(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_clinical_age(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::clinical::ClinicalRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .clinical_age(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_import_list(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::import::ImportListRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .list_training_imports(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn wellness_import_delete(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::import::ImportDeleteRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .delete_training_import(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_preferences(
+    State(state): State<AppState>,
+    current: CurrentUser,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .wellness_preferences(&current.user.user_id)
+            .await?,
+    ))
+}
+async fn wellness_preferences_save(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::preferences::SavePreferences>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .save_wellness_preferences(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_series(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::series::SeriesRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .wellness_series(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_timeline(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::timeline::TimelineRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .wellness_timeline(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_review(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::review::ReviewRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .wellness_review(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_import_tcx(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::import::XmlImportRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _slot = state
+        .health_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AppError::RateLimited)?;
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .import_tcx(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_regularity(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::sleep::SleepRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _slot = state
+        .health_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AppError::RateLimited)?;
+    Ok(Json(
+        state
+            .database
+            .sleep_regularity_view(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn associations_run(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::associations::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _slot = state
+        .health_slots
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| AppError::RateLimited)?;
+    Ok(Json(
+        state
+            .database
+            .behavior_associations(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn associations_list(
+    State(state): State<AppState>,
+    current: CurrentUser,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .association_results(&current.user.user_id)
+            .await?,
+    ))
+}
+async fn associations_get(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::associations::GetRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .association_result(&current.user.user_id, &request.result_id)
+            .await?,
+    ))
+}
+
+async fn wellness_hrv(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::hrv::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .hrv_windows(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_library(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::planning::LibraryRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .wellness_library(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn food_portion(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::food::PortionRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .food_portion(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn nutrition_day(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::food::DayRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .nutrition_day(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn specialty_records(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::records::ListRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .specialty_records(&current.user.user_id, request)
+            .await?,
+    ))
+}
+async fn specialty_record(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::records::GetRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .specialty_record(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn reminder_occurrences(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::reminders::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    Ok(Json(
+        state
+            .database
+            .reminder_occurrences(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn request_coach(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::coach::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        serde_json::json!({"run_id":crate::wellness::coach::request(&state,&current.user.user_id,request).await?}),
+    ))
+}
+
+async fn import_fit(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::fit::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    let _guard = state.file_mutation.lock().await;
+    Ok(Json(
+        state
+            .database
+            .import_fit(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_report(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::report::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .wellness_report(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_diet(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::diet::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .diet_quality(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_meal_glucose(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::meal_glucose::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .meal_glucose(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn wellness_meals(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Json(request): Json<crate::wellness::meals::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(
+        state
+            .database
+            .meal_plans(&current.user.user_id, request)
+            .await?,
+    ))
+}
+
+async fn food_lookup(
+    State(state): State<AppState>,
+    _current: CurrentUser,
+    Json(request): Json<crate::wellness::food_lookup::Request>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let _permit = state
+        .health_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Internal)?;
+    Ok(Json(crate::wellness::food_lookup::lookup(request).await?))
 }

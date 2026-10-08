@@ -70,13 +70,13 @@ docker compose -f docker/docker-compose.yaml exec --user "$PUID:$PGID" backend_a
 
 ## 数据、复制与恢复
 
-SQLite schema v7，启用外键、WAL 和 FULL synchronous。按用户“playground 为空、无需 migration”的要求，当前只支持空库初始化和 v7 重启；旧版本或其他未知版本明确拒绝启动，不自动修改或删除旧库。历史 migration SQL 已移除。同一 data 只允许一个服务进程；管理员命令可独立运行。
+SQLite schema v1，启用外键、WAL 和 FULL synchronous。按用户“playground 为空、无需 migration”的要求，当前只支持空库初始化和 v1 重启；旧版本或其他未知版本明确拒绝启动，不自动修改或删除旧库。历史 migration SQL 已移除。同一 data 只允许一个服务进程；管理员命令可独立运行。
 
 停服并停止管理员写入后，复制整个 data（包含仍存在的 SQLite sidecar）；根内的 config.toml 已含服务凭据。OCR 的独立根目录也应复制，其密钥也只在 TOML 内。恢复到独立目录/卷，用相同版本启动核对账户、原件、修订与导出。当前没有跨 schema 升级、在线备份或自动备份机制。
 
 报告/账户删除先在事务内使内容不可访问并撤销有关任务或会话，再由持久清理队列删除文件。旧上传 ID 和健康删除事件保留最小抑制标记，避免迟到上传复活。用户自己导出的文件、手机分享目的地和独立备份不在服务器删除范围内。
 
-导出 v3 在一致数据库快照中生成 JSONL、CSV、原件和版本清单，随后再次核对数据版本；数据变化使旧导出不可下载。失败/过期导出可删除后重新生成。CSV 防公式执行，JSONL 保留原字符串；包含健康有效修订原件、OCR/解析完整回复和人工修订。
+导出 v1 在一致数据库快照中生成 JSONL、CSV、原件和版本清单，随后再次核对数据版本；数据变化使旧导出不可下载。失败/过期导出可删除后重新生成。CSV 防公式执行，JSONL 保留原字符串；包含健康有效修订原件、OCR/解析完整回复和人工修订。
 
 原件实际路径是 `raw/photos/<user_id>/<file_id>`、`raw/documents/<user_id>/<file_id>`、`raw/apple_health/<user_id>/<revision_id>.json`，以及预留的 `raw/google_health/<user_id>/<revision_id>.json`。上传原件无扩展名，文件名和类型保留在 SQLite；health_connect 映射到 google_health 目录。HEIC 原件保留，derived 下 JPEG 仅供 OCR。ZIP 按这些索引路径收录原件。
 

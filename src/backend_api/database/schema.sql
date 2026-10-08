@@ -116,7 +116,7 @@ CREATE TABLE extraction_pages (
 CREATE TABLE health_connections (
     connection_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect')),
+    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect', 'manual', 'file_import')),
     installation_id TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     UNIQUE (user_id, connection_id),
@@ -124,7 +124,7 @@ CREATE TABLE health_connections (
 );
 CREATE TABLE health_records (
     user_id TEXT NOT NULL,
-    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect')),
+    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect', 'manual', 'file_import')),
     source_id TEXT NOT NULL,
     record_id TEXT NOT NULL,
     record_type TEXT NOT NULL,
@@ -137,9 +137,10 @@ CREATE TABLE health_records (
     FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 );
 CREATE INDEX health_records_range ON health_records (user_id, record_type, start_at, end_at);
+CREATE INDEX health_records_end ON health_records (user_id, record_type, end_at, start_at);
 CREATE TABLE health_revisions (
     user_id TEXT NOT NULL,
-    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect')),
+    platform TEXT NOT NULL CHECK (platform IN ('apple_health', 'health_connect', 'manual', 'file_import')),
     source_id TEXT NOT NULL,
     record_id TEXT NOT NULL,
     revision_id TEXT NOT NULL,
@@ -238,3 +239,43 @@ CREATE TABLE extraction_inputs (
     PRIMARY KEY (user_id, report_id, run_id, page_number),
     FOREIGN KEY (user_id, report_id) REFERENCES reports (user_id, report_id) ON DELETE CASCADE
 );
+
+CREATE TABLE derived_results (
+    result_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind = 'behavior_association'),
+    algorithm_version TEXT NOT NULL,
+    input_revision INTEGER NOT NULL,
+    parameters_json TEXT NOT NULL,
+    input_json TEXT NOT NULL,
+    output_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE (user_id, result_id)
+);
+CREATE INDEX derived_results_user ON derived_results (user_id, created_at DESC, result_id);
+CREATE TRIGGER invalidate_derived_results AFTER UPDATE OF data_revision ON users
+WHEN NEW.data_revision != OLD.data_revision
+BEGIN
+    DELETE FROM derived_results WHERE user_id = NEW.user_id;
+END;
+
+CREATE TABLE daily_views (
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    request_key TEXT NOT NULL,
+    parameters_json TEXT NOT NULL,
+    input_revision INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('queued','running','ready','failed')),
+    result_json TEXT,
+    claim_token TEXT,
+    lease_until INTEGER,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error_code TEXT,
+    requested_at INTEGER NOT NULL,
+    PRIMARY KEY(user_id,request_key)
+);
+CREATE INDEX daily_views_queue ON daily_views(status,lease_until,requested_at);
+CREATE TRIGGER requeue_daily_views AFTER UPDATE OF data_revision ON users
+WHEN NEW.data_revision != OLD.data_revision
+BEGIN
+    UPDATE daily_views SET input_revision=NEW.data_revision,status='queued',result_json=NULL,claim_token=NULL,lease_until=NULL,attempts=0,error_code=NULL WHERE user_id=NEW.user_id;
+END;
